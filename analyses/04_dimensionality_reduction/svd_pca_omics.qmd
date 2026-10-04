@@ -20,16 +20,18 @@ were kept).
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, CSV, HTTP, JSON
 using MultivariateStats
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ## Serum metabolites: eigenvalues of the covariance matrix
 
 The JSON was read from `https://provanik.s3.us-east-2.amazonaws.com/data_serum.json`
-(no longer available); place a copy in `data/serum/data_serum.json`.
+(no longer available); place a copy in `.data/serum/data_serum.json`.
 
 ```{julia}
 #| eval: false
-jobj = JSON.parsefile(datadir("serum", "data_serum.json"))
+jobj = JSON.parsefile(joinpath(DATA, "serum", "data_serum.json"))
 serum_sample = vcat(DataFrame.(jobj["serum_sample"])..., cols = :union);
 X = permutedims(Matrix{Float64}(serum_sample[:, 1:1198]))
 
@@ -47,7 +49,7 @@ bar(eig_expl, xlabel = "Components", ylabel = "% var explained",
 
 ```{julia}
 #| eval: false
-cpgs = read_arrow(datadir("GSE71678", "GSE71678_cpgs_original.arrow"));
+cpgs = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cpgs_original.arrow")));
 matcpgs = rescale(permutedims(Matrix{Float64}(cpgs[:, 2:end])); dims = 1);
 svdcpgs = svd(matcpgs);
 100 * svdcpgs.S / sum(svdcpgs.S)
@@ -62,9 +64,9 @@ SD by sex and completed gestational week).
 
 ```{julia}
 #| eval: false
-df = read_arrow(datadir("GSE48355", "GSE48355_cov_original.arrow"));
+df = DataFrame(Arrow.Table(joinpath(DATA, "GSE48355", "GSE48355_cov_original.arrow")));
 rename!(df, [:ID, :smk, :gestage, :bw_g, :sex, :tissue, :UAs_spg, :DAs, :species, :mage])
-bw = CSV.read(datadir("GSE48355", "bw.csv"), DataFrame);
+bw = CSV.read(joinpath(DATA, "GSE48355", "bw.csv"), DataFrame);
 bw.compl_gestage_w = Float64.(bw.compl_gestage_w)
 DT = innerjoin(df, bw, on = [:sex => :sex, :gestage => :compl_gestage_w])
 DT.bw_zscore = (DT.bw_g .- DT.mean) ./ DT.std;
@@ -72,7 +74,7 @@ DT.bw_zscore = (DT.bw_g .- DT.mean) ./ DT.std;
 
 ```{julia}
 #| eval: false
-miRNA = read_arrow(datadir("GSE48355", "GSE48355_miRNA.arrow"));
+miRNA = DataFrame(Arrow.Table(joinpath(DATA, "GSE48355", "GSE48355_miRNA.arrow")));
 miRNA = miRNA[:, intersect(names(miRNA), vcat("ID_REF", DT.ID))];
 matRNA = rescale(Matrix{Float64}(miRNA[:, 2:end]); dims = 1);
 

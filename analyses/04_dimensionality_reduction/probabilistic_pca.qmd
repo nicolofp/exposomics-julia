@@ -22,6 +22,8 @@ the `bayes_lib.jl` version.
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distributions
 using Turing, ReverseDiff
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ## Simulated expression matrix
@@ -56,8 +58,8 @@ standardised (`omics_matrix`); first 10 metabolites to keep sampling fast.
 
 ```{julia}
 #| eval: false
-df    = read_arrow(datadir("ST001828", "covariates.arrow"));
-buneg = read_arrow(datadir("ST001828", "buneg.arrow"));
+df    = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "covariates.arrow")));
+buneg = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "buneg.arrow")));
 M_all, met_ids = omics_matrix(buneg, :metabolite, 2:101; max_missing = 25)
 M_buneg = rescale(M_all[:, 1:10])
 N, D = size(M_buneg)
@@ -101,8 +103,8 @@ with shared latent factors.
 
 ```{julia}
 #| eval: false
-DT = load_helix_clean();
-x  = rescale(Matrix{Float64}(DT[:, helix_exposure_names(DT)]))
+DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
+x  = rescale(Matrix{Float64}(DT[:, names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log))]))
 y  = Vector{Float64}(DT.bw_zscore)
 chain_ard  = sample(pPCA_ARD(x, 5), NUTS(), 500)
 chain_sard = sample(spPCA_ARD(x, y, 5), NUTS(), 500)

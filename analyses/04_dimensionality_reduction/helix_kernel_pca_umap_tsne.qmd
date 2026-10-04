@@ -16,16 +16,18 @@ Source: `EnvBRAN/dim_reduction.jl`.
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, Distances, Random
 using MultivariateStats, UMAP, TSne
+using CSV
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
-The HELIX tables were read from the public `envbran` bucket; `helix_table`
-uses `data/helix/*.tsv` when available. The bucket is no longer public, so the
+The HELIX tables were read from the public `envbran` bucket; the code
+reads the local copies in `.data/helix/*.tsv`. The bucket is no longer public, so the
 chunks that need these tables are not evaluated (`eval: false`).
 
 ```{julia}
 #| eval: false
-codebook = helix_table("codebook");
-exposure = helix_table("covariates");
+codebook = CSV.read(joinpath(DATA, "helix", "codebook.tsv"), DataFrame; delim = '\t');
+exposure = CSV.read(joinpath(DATA, "helix", "covariates.tsv"), DataFrame; delim = '\t');
 
 exposure_list = filter([:period, :var_type, :domain, :variable_name] => (x, y, z, k) ->
                            x == "Pregnancy" && y == "numeric" && z != "Covariates" &&

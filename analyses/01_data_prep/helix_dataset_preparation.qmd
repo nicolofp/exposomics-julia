@@ -5,7 +5,7 @@ engine: julia
 julia:
   exeflags: ["--project=projects/exposomics-julia"]
 execute:
-  eval: false   # input data not in the repo (see data/README.md)
+  eval: false   # input data not in the repo
 ---
 
 Import data from the **HELIX project** (Exposome Data Challenge tables) and
@@ -19,15 +19,15 @@ Source: `EnvBRAN/dataset_preparation.ipynb`.
 using ExposomicsJulia
 using DataFrames, Statistics, CategoricalArrays, StatsBase
 using Parquet, JLD2, Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
-Load the data from the `.parquet` tables (expected in `data/helix/`, see
-`data/README.md`).
+Load the data from the `.parquet` tables (expected in `.data/helix/`).
 
 ```{julia}
-covariates = DataFrame(read_parquet(datadir("helix", "covariates.parquet")));
-phenotype  = DataFrame(read_parquet(datadir("helix", "phenotype.parquet")));
-codebook   = DataFrame(read_parquet(datadir("helix", "codebook.parquet")));
+covariates = DataFrame(read_parquet(joinpath(DATA, "helix", "covariates.parquet")));
+phenotype  = DataFrame(read_parquet(joinpath(DATA, "helix", "phenotype.parquet")));
+codebook   = DataFrame(read_parquet(joinpath(DATA, "helix", "codebook.parquet")));
 ```
 
 Codebook with all the exposures considered (metals shown as an example):
@@ -81,7 +81,7 @@ DT.e3_gac_Cat = cut(DT.e3_gac_None, [37, 39, 40, 41, 45]);
 ```
 
 Birth-weight z-score within cohort × gestational-age class × sex
-(`add_zscore` from `src/data.jl`):
+(`add_zscore` from `src/transformations.jl`):
 
 ```{julia}
 DT = add_zscore(DT, :e3_bw, [:h_cohort, :e3_gac_Cat, :e3_sex_None]; name = :bw_zscore);
@@ -101,12 +101,12 @@ show(DT[:, ["ID", "h_cohort", "e3_sex_None", "bw_zscore", "h_pm10_ratio_preg_Non
      allcols = true)
 ```
 
-Save the result in `data/helix/`: the Arrow copy (`clean_dt.arrow`, without
-the categorical `e3_gac_Cat` column, read by default by `load_helix_clean()`)
+Save the result in `.data/helix/`: the Arrow copy (`clean_dt.arrow`, without
+the categorical `e3_gac_Cat` column, read by the downstream analyses)
 and the JLD2 file of the original notebook (`clead_dt.jld2`).
 
 ```{julia}
 #| eval: false
-Arrow.write(datadir("helix", "clean_dt.arrow"), select(DT, Not(:e3_gac_Cat)))
-save_object(datadir("helix", "clead_dt.jld2"), DT)
+Arrow.write(joinpath(DATA, "helix", "clean_dt.arrow"), select(DT, Not(:e3_gac_Cat)))
+save_object(joinpath(DATA, "helix", "clead_dt.jld2"), DT)
 ```

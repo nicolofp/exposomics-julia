@@ -16,12 +16,14 @@ Source: `EnvBRAN/b_mixture.ipynb` (models from `EnvBRAN/bayes_lib.jl`).
 using ExposomicsJulia
 using DataFrames, Statistics, StatsBase, Distributions
 using Turing, ReverseDiff, JLD2
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 Import the clean dataset produced by `01_data_prep/helix_dataset_preparation.qmd`.
 
 ```{julia}
-DT = load_helix_clean();
+DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 ```
 
 Let's select metals and covariates for the analysis: the metals selected are
@@ -31,7 +33,7 @@ pregnancy** and **maternal age**. The outcome is the birth-weight z-score.
 
 ```{julia}
 metals  = names(DT)[contains.(names(DT), "m_Log2")][1:9];
-covar   = HELIX_COVARIATES;
+covar   = ["h_mbmi_None", "hs_wgtgain_None", "h_age_None"];
 outcome = "bw_zscore";
 
 mx = Matrix{Float64}(DT[:, metals]);
@@ -53,7 +55,7 @@ the files to re-sample.
 ```{julia}
 sampler = NUTS(0.65; adtype = AutoReverseDiff(; compile = true))
 function cached_chain(file, model)
-    path = resultsdir(file)
+    path = joinpath(pkgdir(ExposomicsJulia), "results", file); mkpath(dirname(path))
     isfile(path) && return load_object(path)
     ch = sample(model, sampler, 5000; thinning = 3)
     save_object(path, ch)

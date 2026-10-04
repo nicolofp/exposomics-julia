@@ -16,13 +16,15 @@ Source: `EnvBRAN/umet_exposure.ipynb` (the `.md` export and figures were dropped
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distances
 using Convex, SCS
+using CSV
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
 #| eval: false
-codebook  = helix_table("codebook");
-met_urine = helix_table("met_urine");
-exposure  = helix_table("covariates");
+codebook  = CSV.read(joinpath(DATA, "helix", "codebook.tsv"), DataFrame; delim = '\t');
+met_urine = CSV.read(joinpath(DATA, "helix", "met_urine.tsv"), DataFrame; delim = '\t');
+exposure  = CSV.read(joinpath(DATA, "helix", "covariates.tsv"), DataFrame; delim = '\t');
 
 tmp = filter([:period, :var_type, :domain, :period_postnatal, :family] => (x, y, z, w, p) ->
                  x == "Postnatal" && y == "numeric" && z != "Covariates" && z != "Phenotype" &&

@@ -19,6 +19,8 @@ exports and figures were dropped.
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, CategoricalArrays
 using GigaSOM, TSne, UMAP
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 Self-organizing maps (SOM) are a type of artificial neural network that use unsupervised learning to create a low-dimensional representation of high-dimensional data. The algorithm involves iteratively adjusting the weights of neurons in the network to create a topological map of the input data. The formula for SOM can be expressed as follows:
@@ -40,8 +42,8 @@ The algorithm works as follows:
 
 ```{julia}
 #| eval: false
-df   = read_arrow(datadir("GSE71678", "GSE71678_cov_original.arrow"));
-cpgs = read_arrow(datadir("GSE71678", "GSE71678_cpgs_original.arrow"));
+df   = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cov_original.arrow")));
+cpgs = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cpgs_original.arrow")));
 cpgs = cpgs[:, vcat("ID_REF", df.ID)];
 x = Matrix{Float64}(cpgs[:, 2:end]);
 size(x)
@@ -83,7 +85,7 @@ scatter(e[:, 1], e[:, 2], label = "", title = "SOM plot")
 
 ```{julia}
 #| eval: false
-dfi = read_arrow(datadir("GSE71678", "GSE71678_cov_imputed.arrow"))
+dfi = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cov_imputed.arrow")))
 metals = names(dfi)[[8, 10, 11, 12, 13, 14, 15, 16]]
 Xm = Matrix{Float64}(dfi[:, metals]);
 ```

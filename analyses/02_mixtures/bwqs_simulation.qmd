@@ -22,6 +22,7 @@ and `met_classification/multichain_test.jl`.
 using ExposomicsJulia
 using LinearAlgebra, Distributions, Statistics, StatsBase, Random
 using Turing, ReverseDiff, CSV, DataFrames
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ## Simulated mixture
@@ -90,11 +91,11 @@ The scripts also fitted the same models to a small example dataset
 (`bwqs_tmp.csv`: columns 2–6 mixture, 7–9 covariates, `y` outcome),
 originally at `https://envbran.s3.us-east-2.amazonaws.com/bwqs_tmp.csv`
 (no longer publicly reachable) or `C:/Users/nicol/Documents/bwqs_tmp.csv`;
-put a copy in `data/bwqs_tmp.csv`.
+put a copy in `.data/bwqs_tmp.csv`.
 
 ```{julia}
 #| eval: false
-DT = CSV.read(datadir("bwqs_tmp.csv"), DataFrame)
+DT = CSV.read(joinpath(DATA, "bwqs_tmp.csv"), DataFrame)
 XMd = Matrix(DT[:, 2:6]); XCd = Matrix(DT[:, 7:9]); yd = DT[:, :y]
 chain_tmp = sample(bwqs(XCd, XMd, yd), NUTS(), MCMCThreads(), 5000, 4)
 ```
@@ -108,7 +109,7 @@ addprocs(4; exeflags = "--project=$(Base.active_project())")
 @everywhere using ExposomicsJulia, Turing, CSV, DataFrames
 
 @everywhere begin
-    DT = CSV.read(datadir("bwqs_tmp.csv"), DataFrame)
+    DT = CSV.read(joinpath(DATA, "bwqs_tmp.csv"), DataFrame)
     model_bwqs_multi = bwqs_adv(Matrix(DT[:, 7:9]), Matrix(DT[:, 2:6]), DT[:, :y];
                                 alpha_prior = Gamma(2.0, 2.0))
 end

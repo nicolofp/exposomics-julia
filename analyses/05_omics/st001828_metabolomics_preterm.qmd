@@ -19,13 +19,15 @@ version: imputation, tests, random forest).
 using ExposomicsJulia
 using DataFrames, Random, LinearAlgebra, Distributions, Statistics, StatsBase
 using HypothesisTests, DecisionTree, Plots
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
 #| eval: false
-df      = read_arrow(datadir("ST001828", "covariates.arrow"));
-btpos   = read_arrow(datadir("ST001828", "bupos.arrow"));     # notebook used btpos.arrow
-btpos_c = read_arrow(datadir("ST001828", "btpos_code.arrow"));
+df      = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "covariates.arrow")));
+btpos   = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "bupos.arrow")));     # notebook used btpos.arrow
+btpos_c = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "btpos_code.arrow")));
 ```
 
 ## Missing data and imputation

@@ -1,8 +1,6 @@
-# Data and outputs never go into git (README stubs excepted)
-data/*
-!data/README.md
+# Data and outputs never go into git
+.data/*
 results/*
-!results/README.md
 
 # Large/binary artefacts
 *.jld2

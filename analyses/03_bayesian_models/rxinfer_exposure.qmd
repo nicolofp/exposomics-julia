@@ -22,11 +22,13 @@ Ported from the RxInfer 2 API of the original (`datavar`, `inference`,
 ```{julia}
 using ExposomicsJulia
 using RxInfer, DataFrames, Statistics, LinearAlgebra, Distributions
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
-DT = load_helix_clean();
-enames   = vcat(HELIX_COVARIATES, helix_exposure_names(DT))
+DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
+enames   = vcat(["h_mbmi_None", "hs_wgtgain_None", "h_age_None"], names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log)))
 Exposure = Matrix{Float64}(DT[:, enames])
 bw       = Vector{Float64}(DT.bw_zscore);
 ```

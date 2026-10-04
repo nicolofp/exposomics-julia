@@ -1,16 +1,8 @@
-# Canonical Turing models.
+# Turing models.
 #
-# These replace the copies that were scattered across EnvBRAN/bayes_lib.jl,
-# the EnvBRAN notebooks and the met_classification scripts. They are written
-# for current Turing/Distributions (no `Turing.setadbackend`; choose the AD
-# backend in the sampler, e.g. `NUTS(; adtype = AutoReverseDiff(; compile = true))`;
-# `sample` returns a FlexiChains chain, see `draws`/`chain_summary` in stats.jl).
-#
-# Distributions ≥ 0.25 removed `MvNormal(μ, σ)` with a *standard deviation*
-# as second argument. Every such call was translated to an explicit
-# covariance: `MvNormal(μ, σ)` → `MvNormal(μ, σ^2 * I)` and
-# `MvNormal(μ, s::Vector)` → `MvNormal(μ, Diagonal(s .^ 2))`, so the models are
-# the same as the originals.
+# Choose the AD backend in the sampler, e.g.
+# `NUTS(; adtype = AutoReverseDiff(; compile = true))`; `sample` returns a
+# FlexiChains chain, see `draws`/`chain_summary` in stats.jl.
 
 # ---------------------------------------------------------------------------
 # Bayesian weighted quantile sum (BWQS) family
@@ -38,9 +30,6 @@ end
     bwqs_adv(cx, mx, y; alpha_prior = Gamma(1.0, 1.0))
 
 BWQS with a hierarchical Dirichlet: `alpha_k ~ alpha_prior`, `w ~ Dirichlet(alpha)`.
-`bwqs_adv` in EnvBRAN used `Gamma(1, 1)`; `bwqs_new` in met_classification
-(`test_mixture.jl`, `bayesian_stuff.jl`, `multichain_test.jl`) is the same
-model with `alpha_prior = Gamma(2.0, 2.0)`.
 """
 @model function bwqs_adv(cx, mx, y; alpha_prior = Gamma(1.0, 1.0))
     σ₂ ~ Gamma(2.0, 2.0)
@@ -53,7 +42,7 @@ model with `alpha_prior = Gamma(2.0, 2.0)`.
     return y ~ MvNormal(mu, σ₂ * I)
 end
 
-"Numerically naive softmax, as in the original scripts."
+"Numerically naive softmax."
 softmax(x) = exp.(x) ./ sum(exp.(x))
 
 """
@@ -68,9 +57,8 @@ DirichletLogit(μ, ϕ) = Dirichlet(softmax(μ) * ϕ)
     bwqs_soft(cx, mx, y; alpha = nothing, phi = nothing)
 
 BWQS with a logit-Dirichlet prior on the weights, `w ~ DirichletLogit(alpha, phi)`.
-By default `alpha_k ~ Exponential(1)` and `phi ~ Gamma(2, 2)` are estimated
-(`bayesian_stuff.jl` version). Passing numbers fixes them, e.g.
-`alpha = fill(50.0, p), phi = 10.0` reproduces the `test_mixture.jl` version.
+By default `alpha_k ~ Exponential(1)` and `phi ~ Gamma(2, 2)` are estimated.
+Passing numbers fixes them, e.g. `alpha = fill(50.0, p), phi = 10.0`.
 """
 @model function bwqs_soft(cx, mx, y; alpha = nothing, phi = nothing)
     σ₂ ~ Gamma(2.0, 2.0)
@@ -98,9 +86,7 @@ end
 
 Hierarchical BWQS (random intercept and random mixture slope per group
 `idx ∈ 1:G`), non-centred slopes `βⱼ * τᵦ`. `M` = mixture scores, `X` =
-covariates. Based on `hbwqs2` in met_classification/bwqshd.jl (see README:
-the original summed the group slopes over all groups for every observation;
-here each observation uses its own group's slope, as intended).
+covariates. Each observation uses its own group's slope.
 """
 @model function hbwqs(M, X, idx, y; n_gr = length(unique(idx)), predictors = size(X, 2), nmix = size(M, 2))
     σ ~ Exponential(std(y))                               # residual SD
@@ -138,8 +124,6 @@ end
 
 Linear regression with Automatic Relevance Determination:
 `coefficients_j ~ N(prior_mean, 1/alpha_j)`, `alpha_j ~ Gamma(2, 2)`.
-(The EnvBRAN notebook used a prior mean of 1, almost certainly a typo; pass
-`prior_mean = 1.0` to reproduce it.)
 """
 @model function linear_regression_ard(x, y; prior_mean = 0.0)
     p = size(x, 2)
@@ -155,8 +139,7 @@ end
     logistic_ard(x, y)
 
 Bayesian logistic regression with ARD priors on the slopes
-(`β₁_j ~ N(0, 1/α_j)`, `α_j ~ Gamma(2, 2)`). The unused `σ₂` parameter of the
-original script was dropped.
+(`β₁_j ~ N(0, 1/α_j)`, `α_j ~ Gamma(2, 2)`).
 """
 @model function logistic_ard(x, y)
     D = size(x, 2)
@@ -175,7 +158,7 @@ Negative binomial parameterised by mean `μ` and overdispersion `ϕ`
 """
 function NegativeBinomial2(μ, ϕ)
     p = 1 / (1 + μ / ϕ)
-    p = clamp(p, 1e-4, 1 - 1e-10) # numerical stability (the original only guarded p > 0)
+    p = clamp(p, 1e-4, 1 - 1e-10) # numerical stability
     return NegativeBinomial(ϕ, p)
 end
 
@@ -198,8 +181,6 @@ end
     negbin_regression(X, y)
 
 Negative-binomial regression with vague Normal priors and `ϕ ~ InverseGamma(0.1, 0.1)`.
-(`NegativeBinomialRegression` and `negbinreg` in bayesian_stuff.jl were the
-same model, looped vs vectorised; this is the vectorised one.)
 """
 @model function negbin_regression(X, y; predictors = size(X, 2))
     α ~ Normal(0, 10)
@@ -213,7 +194,7 @@ end
 
 Gamma–Poisson model for counts: row `n` of `x` is Poisson with a
 row-specific background rate `br[n] ~ Gamma(a0, b0)`, with hyperpriors on
-`a0`, `b0`. (Duplicated in gp.jl and nb_regression.jl.)
+`a0`, `b0`.
 """
 @model function gamma_poisson(x)
     N, D = size(x)
@@ -263,7 +244,7 @@ end
     pPCA_ARD(x, k)
 
 Unsupervised pPCA with an ARD prior on the `k` latent components
-(`alpha_k ~ Gamma(1, 1)`), from EnvBRAN/bayes_lib.jl.
+(`alpha_k ~ Gamma(1, 1)`).
 """
 @model function pPCA_ARD(x, k)
     N, D = size(x)

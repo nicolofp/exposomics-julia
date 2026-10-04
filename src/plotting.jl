@@ -1,12 +1,11 @@
-"Colour palette used throughout the original notebooks (one colour per cohort/group)."
+"Default colour palette (one colour per group)."
 const PALETTE = [:coral, :yellow2, :lime, :turquoise2, :magenta, :dimgray]
 
 """
     group_codes(v) -> Vector{Int}
 
-Map the distinct values of `v` (e.g. HELIX cohort "1"…"6", sex, clusters) to
+Map the distinct values of `v` (e.g. groups, sex, clusters) to
 integer codes `1:k` in sorted order, for indexing [`PALETTE`](@ref).
-Replaces the hand-written `recode(...)` blocks.
 """
 function group_codes(v)
     lv = sort(unique(v))

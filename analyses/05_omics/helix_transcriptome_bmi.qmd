@@ -15,13 +15,14 @@ Source: `EnvBRAN/genexpr.jl`.
 ```{julia}
 using ExposomicsJulia
 using DataFrames, Plots, LinearAlgebra, Statistics, Distributions, CSV, Parquet, TSne
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
 #| eval: false
-phenotype   = DataFrame(read_parquet(datadir("helix", "phenotype.parquet")));
-genexpr     = CSV.read(datadir("helix", "genexpr_num.csv"), DataFrame);       # genes × samples, first column `rn`
-genexpr_cov = DataFrame(read_parquet(datadir("helix", "genexpr_cov.parquet")));
+phenotype   = DataFrame(read_parquet(joinpath(DATA, "helix", "phenotype.parquet")));
+genexpr     = CSV.read(joinpath(DATA, "helix", "genexpr_num.csv"), DataFrame);       # genes × samples, first column `rn`
+genexpr_cov = DataFrame(read_parquet(joinpath(DATA, "helix", "genexpr_cov.parquet")));
 ```
 
 Per-gene summary statistics:

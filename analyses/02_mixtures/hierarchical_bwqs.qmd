@@ -18,6 +18,7 @@ single slope SD was dropped as superseded).
 using ExposomicsJulia
 using DataFrames, CSV, HTTP, Statistics
 using Turing, ReverseDiff
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ## Toy multilevel example
@@ -48,12 +49,12 @@ idx = cheese[:, :background_int];
 
 ## Exposure mixture by cohort
 
-`bwqs_tmp.csv` (see `data/README.md`): quantised urinary metals
+`.data/bwqs_tmp.csv`: quantised urinary metals
 `UAs_q … UPb_q`, covariates in columns 8–12 and 15–17, cohort index.
 
 ```{julia}
 #| eval: false
-DT  = CSV.read(datadir("bwqs_tmp.csv"), DataFrame)
+DT  = CSV.read(joinpath(DATA, "bwqs_tmp.csv"), DataFrame)
 M   = Matrix(select(DT, Between(:UAs_q, :UPb_q)));
 X   = Matrix(DT[:, vcat(8:12, 15:17)]);
 y   = DT[:, :y];

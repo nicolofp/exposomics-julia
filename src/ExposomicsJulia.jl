@@ -3,14 +3,13 @@
 
 Shared helpers for the exposomics / omics analyses in `analyses/`.
 
-The module collects code that used to be copy-pasted across the EnvBRAN
-notebooks and the met_classification scripts:
+Contents:
 
-* `data.jl`     – data paths, loading, standardisation, missing-data filtering,
-                  quantile (ECDF) scoring of exposures, birth-weight z-scores.
+* `transformations.jl` – standardisation, missing-data filtering and
+                  imputation, quantile (ECDF) scoring, grouped z-scores.
 * `stats.jl`    – fast OLS with inference, single-exposure (EWAS-style) scans,
                   fit metrics, posterior-chain summaries.
-* `models.jl`   – canonical Turing models (BWQS family, ARD regressions,
+* `models.jl`   – Turing models (BWQS family, ARD regressions,
                   negative binomial, gamma–Poisson, probabilistic PCA).
 * `plotting.jl` – small plotting helpers (colour palettes, embeddings).
 
@@ -27,21 +26,16 @@ using StatsBase
 using Turing
 using LazyArrays
 using Plots
-import Arrow
-import JLD2
 import StatsFuns
-import CSV
-import HTTP
 
-include("data.jl")
+include("transformations.jl")
 include("stats.jl")
 include("models.jl")
 include("plotting.jl")
 
-# data.jl
-export projectdir, datadir, resultsdir, read_arrow, load_helix_clean, HELIX_COVARIATES, helix_exposure_names
+# transformations.jl
 export rescale, ecdf_score, ecdf_score!, missing_fraction, filter_by_missingness, impute_median
-export add_zscore, omics_matrix, helix_table
+export add_zscore, omics_matrix
 # stats.jl
 export ols, ols_summary, exposure_scan, fit_metrics, draws, posterior_mean, chain_summary, credible_nonzero
 # models.jl

@@ -19,13 +19,15 @@ writes to `results/gexpr_results/`).
 ```{julia}
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Distributions, CSV, Parquet, Combinatorics
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
 #| eval: false
-DT = load_helix_clean();
-genexpr     = CSV.read(datadir("helix", "genexpr_num.csv"), DataFrame);
-genexpr_cov = DataFrame(read_parquet(datadir("helix", "genexpr_cov.parquet")));
+DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
+genexpr     = CSV.read(joinpath(DATA, "helix", "genexpr_num.csv"), DataFrame);
+genexpr_cov = DataFrame(read_parquet(joinpath(DATA, "helix", "genexpr_cov.parquet")));
 genexpr_t = permutedims(genexpr, 1);
 rename!(genexpr_t, :rn => :ID);
 
@@ -33,7 +35,7 @@ DT = innerjoin(genexpr_cov, DT, on = :ID);
 DT = innerjoin(DT, genexpr_t, on = :ID);
 DT = DT[completecases(DT), :];
 
-exposure_label = helix_exposure_names(DT);
+exposure_label = names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log));
 M_exp = rescale(Matrix{Float64}(DT[:, exposure_label]));
 # adjustment covariates: columns 3, 5–12 of the joined table (from genexpr_cov),
 # as in the original code
@@ -78,7 +80,7 @@ Writes the Bonferroni-significant terms of each transcript to
 
 ```{julia}
 #| eval: false
-outdir = resultsdir("gexpr_results"); mkpath(outdir)
+outdir = joinpath(pkgdir(ExposomicsJulia), "results", "gexpr_results"); mkpath(outdir)
 for (j, gene) in enumerate(string.(genexpr.rn))
     println("Analyze #", j, ": ", gene)
     res = exposure_scan(Float64.(DT[:, gene]), EM, covars; names = labels)

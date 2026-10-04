@@ -19,12 +19,14 @@ Source: `met_classification/nb_regression.jl` (models moved to `src/models.jl`;
 using ExposomicsJulia
 using DataFrames, Random, CategoricalArrays, LinearAlgebra, Distributions, Statistics, StatsBase
 using Plots, Turing, ReverseDiff, GigaSOM
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
 #| eval: false
-df   = read_arrow(datadir("GSE154829", "GSE154829_cov.arrow"));
-mRNA = read_arrow(datadir("GSE154829", "GSE154829_miRNA.arrow"));
+df   = DataFrame(Arrow.Table(joinpath(DATA, "GSE154829", "GSE154829_cov.arrow")));
+mRNA = DataFrame(Arrow.Table(joinpath(DATA, "GSE154829", "GSE154829_miRNA.arrow")));
 Mrna = permutedims(Matrix{Float64}(mRNA[:, 2:401]))      # samples × miRNA
 ```
 

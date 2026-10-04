@@ -25,6 +25,8 @@ Source: `EnvBRAN/variational_inference.ipynb`. Load the libraries used in the sc
 ```{julia}
 using ExposomicsJulia
 using Turing, LinearAlgebra, Statistics, DataFrames
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ### Linear Bayesian regression
@@ -46,8 +48,8 @@ The resulting variational distribution can be used to estimate the posterior pro
 Variational inference for variable selection can be extended to handle more complex models, such as hierarchical models and models with interactions between variables. It is a powerful and flexible method that can be used to address a wide range of statistical inference problems.
 
 ```{julia}
-df  = load_helix_clean();
-sel = vcat(HELIX_COVARIATES, helix_exposure_names(df))
+df  = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
+sel = vcat(["h_mbmi_None", "hs_wgtgain_None", "h_age_None"], names(df, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log)))
 Xdt = Matrix{Float64}(df[:, sel])
 Ydt = Array{Float64}(df.bw_zscore);
 ```

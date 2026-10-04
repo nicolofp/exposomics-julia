@@ -24,6 +24,8 @@ reference and needs a separate environment with `LowRankModels`.
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots
 using MultivariateStats
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ## ST001828 urine metabolites (negative mode)
@@ -32,8 +34,8 @@ Metabolites with ≤ 25 missing samples, median-imputed, standardised.
 
 ```{julia}
 #| eval: false
-df    = read_arrow(datadir("ST001828", "covariates.arrow"));
-buneg = read_arrow(datadir("ST001828", "buneg.arrow"));
+df    = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "covariates.arrow")));
+buneg = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "buneg.arrow")));
 M_buneg, met_ids = omics_matrix(buneg, :metabolite, 2:101; max_missing = 25)
 M10 = M_buneg[:, 1:10]
 
@@ -59,7 +61,7 @@ Only miRNAs without missing values.
 
 ```{julia}
 #| eval: false
-mirna = read_arrow(datadir("GSE108497", "GSE108497_miRNA_norm.arrow"));
+mirna = DataFrame(Arrow.Table(joinpath(DATA, "GSE108497", "GSE108497_miRNA_norm.arrow")));
 M_df, ids = omics_matrix(mirna, :ID_REF, 2:513; max_missing = 0)
 pca_mirna = fit(PCA, permutedims(M_df); maxoutdim = 2)   # was LowRankModels.qpca(M_df, 2)
 Zm = predict(pca_mirna, permutedims(M_df))

@@ -5,7 +5,7 @@ engine: julia
 julia:
   exeflags: ["--project=projects/exposomics-julia"]
 execute:
-  eval: false   # input data not in the repo (see data/README.md)
+  eval: false   # input data not in the repo
 ---
 
 Placental metal concentrations (Al, Cr, Ni, Se, Co, Pb) and birth-weight
@@ -18,10 +18,12 @@ Source: `EnvBRAN/bw_placenta_metals.ipynb`.
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distributions
 using DecisionTree
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
-df = read_arrow(datadir("GSE71678", "GSE71678_cov_original.arrow"));
+df = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cov_original.arrow")));
 df = df[completecases(df[:, ["gestational age", "infant gender", "birth weight (grams)"]]), :];
 ```
 

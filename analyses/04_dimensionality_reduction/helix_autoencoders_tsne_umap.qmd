@@ -19,11 +19,13 @@ to the explicit API of Flux ≥ 0.15 (`Flux.setup`, `train!(loss, model, data, s
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots
 using Flux, UMAP, TSne
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
-DT = load_helix_clean();
-M_exp = Matrix{Float32}(rescale(Matrix{Float32}(DT[:, helix_exposure_names(DT)]); dims = 1));
+DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
+M_exp = Matrix{Float32}(rescale(Matrix{Float32}(DT[:, names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log))]); dims = 1));
 X_all = permutedims(M_exp)                       # features × samples (Flux convention)
 dl = Flux.DataLoader(X_all, batchsize = 100, shuffle = true)
 cohort = string.(DT.h_cohort);

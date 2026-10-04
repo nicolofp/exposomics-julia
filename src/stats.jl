@@ -11,11 +11,7 @@ column if one is wanted.
 
 Returns a `NamedTuple` `(β, se, t, p, lower, upper, σ², dof, residuals)`.
 
-!!! note
-    The original notebooks computed `cdf(TDist(dof), -|t|)`, i.e. a
-    **one-sided** p-value (half the usual two-sided value). The default here
-    is the conventional two-sided p-value; pass `two_sided = false` to
-    reproduce the numbers in the old notebooks.
+`two_sided = false` returns the one-sided p-value `cdf(TDist(dof), -|t|)`.
 """
 function ols(X::AbstractMatrix, y::AbstractVector; level = 0.95, two_sided::Bool = true)
     n, k = size(X)
@@ -53,8 +49,6 @@ fit `y ~ 1 + E[:, j] + C` by OLS and keep the coefficient of `E[:, j]`.
 `C` is a matrix of adjustment covariates (may have zero columns).
 
 Adds a `bonferroni` column (`p_value < 0.05 / ncol(E)`).
-This replaces the hand-written regression loops in `genexpr.jl`,
-`high_exposure.ipynb`, `script_high_exposure.jl` and `GA_genexpr.jl`.
 """
 function exposure_scan(y::AbstractVector, E::AbstractMatrix, C::AbstractMatrix;
                        names = nothing, threaded::Bool = true, alpha = 0.05, kwargs...)
@@ -118,7 +112,7 @@ Posterior draws of parameter `name` (a `Symbol`, string or `VarName`) from a
 Turing chain, pooling all chains. Scalars give a vector (one entry per draw);
 vector/matrix-valued parameters give a `ndraws × length` matrix (column-major
 order of the parameter). Works with the `FlexiChains` chains returned by
-`sample` in Turing ≥ 0.40 (replaces `group(chain, :w)` / `chain[:, i, 1]`).
+`sample` in Turing ≥ 0.40.
 """
 function draws(chain, name)
     key = name isa AbstractString ? Symbol(name) : name

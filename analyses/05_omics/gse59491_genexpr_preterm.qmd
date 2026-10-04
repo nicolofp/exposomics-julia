@@ -17,12 +17,14 @@ an undefined `RExp`; replaced by `exposure_scan`).
 using ExposomicsJulia
 using DataFrames, Random, LinearAlgebra, Distributions, Statistics, StatsBase
 using HypothesisTests, Plots
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ```{julia}
 #| eval: false
-df      = read_arrow(datadir("GSE59491", "GSE59491_cov.arrow"));
-genexpr = read_arrow(datadir("GSE59491", "GSE59491_genexpr.arrow"));
+df      = DataFrame(Arrow.Table(joinpath(DATA, "GSE59491", "GSE59491_cov.arrow")));
+genexpr = DataFrame(Arrow.Table(joinpath(DATA, "GSE59491", "GSE59491_genexpr.arrow")));
 
 # no missing data
 sum(sum(ismissing.(genexpr[:, i])) for i in 1:size(genexpr, 2)),

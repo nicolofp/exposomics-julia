@@ -17,6 +17,8 @@ is in `src/models.jl`.
 ```{julia}
 using ExposomicsJulia
 using Turing, ReverseDiff, LinearAlgebra, Statistics, DataFrames
+using Arrow
+DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
 ### Data
@@ -25,8 +27,8 @@ Maternal covariates (BMI, weight gain, age) and the 57 pregnancy exposures
 of the clean HELIX dataset.
 
 ```{julia}
-df  = load_helix_clean();
-sel = vcat(HELIX_COVARIATES, helix_exposure_names(df))
+df  = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
+sel = vcat(["h_mbmi_None", "hs_wgtgain_None", "h_age_None"], names(df, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log)))
 Xdt = Matrix{Float64}(df[:, sel])
 Ydt = Array{Float64}(df.bw_zscore);
 ```
