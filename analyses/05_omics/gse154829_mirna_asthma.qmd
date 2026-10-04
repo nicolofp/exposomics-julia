@@ -1,21 +1,32 @@
 ---
 title: "GSE154829: miRNA and asthma (ARD logistic, Gamma–Poisson, SOM, DPMM)"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-miRNA expression (GEO **GSE154829**, 400 samples × 2102 miRNA) and asthma:
-SVD, per-miRNA histograms, Bayesian logistic regression with ARD priors
-(`logistic_ard`), a Gamma–Poisson model for the counts
-(`gamma_poisson`), a self-organising map and Dirichlet-process mixture
-clustering (`DPMMSubClusters`).
+## Introduction
 
-Source: `met_classification/nb_regression.jl` (models moved to `src/models.jl`;
-`ard_logistic_regression.jl` contained only the model).
+miRNA expression (GEO **GSE154829** [@edgar2002geo], 400 samples × 2102 miRNA) and asthma:
+SVD, per-miRNA histograms, Bayesian logistic regression with ARD priors
+(`logistic_ard`) [@tipping2001rvm], a Gamma–Poisson model for the counts
+(`gamma_poisson`), a self-organising map [@kohonen1990som] and Dirichlet-process mixture
+clustering (`DPMMSubClusters` [@dinari2019dpmm]).
+
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes], Turing.jl [@ge2018turing] and GigaSOM.jl [@kratochvil2020gigasom].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Random, CategoricalArrays, LinearAlgebra, Distributions, Statistics, StatsBase
 using Plots, Turing, ReverseDiff, GigaSOM
@@ -23,7 +34,10 @@ using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Data
+
 ```{julia}
+#| label: data
 #| eval: false
 df   = DataFrame(Arrow.Table(joinpath(DATA, "GSE154829", "GSE154829_cov.arrow")));
 mRNA = DataFrame(Arrow.Table(joinpath(DATA, "GSE154829", "GSE154829_miRNA.arrow")));
@@ -33,6 +47,7 @@ Mrna = permutedims(Matrix{Float64}(mRNA[:, 2:401]))      # samples × miRNA
 ## SVD and descriptives
 
 ```{julia}
+#| label: svd-and-descriptives
 #| eval: false
 svd_mrna = svd(Mrna)
 var_expl = svd_mrna.S .^ 2 ./ sum(svd_mrna.S .^ 2)
@@ -48,6 +63,7 @@ heatmap(cor(Mrna))
 50-bin histogram counts of every miRNA:
 
 ```{julia}
+#| label: svd-and-descriptives-2
 #| eval: false
 Dmat = hcat(string.(mRNA.Gene), zeros(size(Mrna, 2), 50))
 Threads.@threads for i in 1:size(Mrna, 2)
@@ -60,6 +76,7 @@ end
 ## ARD logistic regression for asthma
 
 ```{julia}
+#| label: ard-logistic-regression-for-asthma
 #| eval: false
 asthma = df.asthma[1:400]
 valid = .!ismissing.(asthma)
@@ -74,6 +91,7 @@ sum(ard_res.nonzero)
 ## Gamma–Poisson model of the counts
 
 ```{julia}
+#| label: gammapoisson-model-of-the-counts
 #| eval: false
 histogram(Mrna[:, 2], label = "observed")
 histogram!(rand(Poisson(mean(Mrna[:, 2])), 400), color = "orange", label = "Poisson")
@@ -84,6 +102,7 @@ chain_gp = sample(gamma_poisson(permutedims(Mrna)), NUTS(), 1500);
 ## Self-organising map
 
 ```{julia}
+#| label: self-organising-map
 #| eval: false
 X = permutedims(x)
 som = initGigaSOM(X, 10, 10)
@@ -104,6 +123,7 @@ section in a separate environment with `] add DPMMSubClusters`.
 :::
 
 ```{julia}
+#| label: dirichlet-process-mixture-clustering
 #| eval: false
 using DPMMSubClusters, Random
 
@@ -125,3 +145,8 @@ pts = permutedims(svd_met.U[:, 1:2])
 labels, clusters, weights = DPMMSubClusters.fit(pts, 1.0, iters = 100, seed = 1234)
 plot_dp_2d(pts, labels)
 ```
+
+## References
+
+::: {#refs}
+:::

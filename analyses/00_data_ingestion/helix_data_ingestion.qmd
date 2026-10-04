@@ -1,0 +1,138 @@
+---
+title: "HELIX: data ingestion from the Exposome Data Challenge 2021"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
+engine: knitr
+---
+
+## Introduction
+
+This document converts the HELIX Exposome Data Challenge 2021 release
+[@vrijheid2014helix] from its R formats (`.RData` data frames and Bioconductor
+`ExpressionSet` objects [@huber2015bioconductor]) into Arrow IPC files under
+`.data/helix/`, the only inputs read by the HELIX analyses of this repository.
+It is the one step written in R: `ExpressionSet` is an S4 class that the Julia
+`RData` reader cannot convert, while R loads every object natively.
+
+All tables share two conventions, so that the Julia code can join them without
+type conversions:
+
++ every subject identifier is a string column named `ID`;
++ factors are stored as strings, missing values as Arrow nulls.
+
+Omics layers keep the `ExpressionSet` orientation (one row per feature, one
+column per sample, first column `feature`) and come with a sample sheet
+(`<layer>_cov.arrow`, the `phenoData`) and a feature sheet
+(`<layer>_features.arrow`, the `featureData`).
+
+## Setup
+
+The conversion uses `Biobase` to unpack the `ExpressionSet` objects and
+`arrow` to write the files.
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+library(Biobase)
+library(arrow)
+
+# source release (sibling clone of the brge_data_large repository) and target folder
+src <- normalizePath(file.path("..", "..", "..", "brge_data_large", "data",
+                               "ExposomeDataChallenge2021"), mustWork = TRUE)
+out <- file.path("..", "..", ".data", "helix")
+dir.create(out, recursive = TRUE, showWarnings = FALSE)
+```
+
+Two helpers enforce the conventions above.
+
+```{r}
+#| label: helpers
+as_plain <- function(df) {
+  df[] <- lapply(df, function(v) if (is.factor(v)) as.character(v) else v)
+  if ("ID" %in% names(df)) df$ID <- as.character(df$ID)
+  df
+}
+
+write_table <- function(df, name) {
+  path <- file.path(out, paste0(name, ".arrow"))
+  write_feather(as_plain(df), path)
+  data.frame(file = basename(path), rows = nrow(df), cols = ncol(df))
+}
+
+write_eset <- function(eset, name) {
+  stopifnot(identical(colnames(exprs(eset)), as.character(pData(eset)$ID)))
+  assay <- data.frame(feature = rownames(exprs(eset)), exprs(eset),
+                      check.names = FALSE, stringsAsFactors = FALSE)
+  feats <- data.frame(feature = rownames(fData(eset)), fData(eset),
+                      check.names = FALSE, stringsAsFactors = FALSE)
+  rbind(write_table(assay, name),
+        write_table(pData(eset), paste0(name, "_cov")),
+        write_table(feats, paste0(name, "_features")))
+}
+
+load_object <- function(file) {
+  e <- new.env()
+  nm <- load(file.path(src, file), envir = e)
+  mget(nm, envir = e)
+}
+```
+
+## Exposome, covariates and phenotypes
+
+`exposome.RData` holds four data frames for the 1301 children: 222 exposures
+(pregnancy and postnatal), 13 covariates, 6 phenotypes and the codebook that
+describes every variable.
+
+```{r}
+#| label: exposome-tables
+ex <- load_object("exposome.RData")
+rbind(write_table(ex$exposome,   "exposome"),
+      write_table(ex$covariates, "covariates"),
+      write_table(ex$phenotype,  "phenotype"),
+      write_table(ex$codebook,   "codebook"))
+```
+
+## Omics layers
+
+Urine metabolome (44 metabolites), serum metabolome (177 metabolites),
+proteome (36 proteins) and blood transcriptome (28738 transcript clusters).
+
+```{r}
+#| label: omics-layers
+#| message: false
+layers <- c(met_urine = "metabol_urine.Rdata", met_serum = "metabol_serum.Rdata",
+            proteome  = "proteome.Rdata",      genexpr   = "genexpr.Rdata")
+do.call(rbind, lapply(names(layers), function(name) {
+  write_eset(load_object(layers[[name]])[[1]], name)
+}))
+```
+
+## Output
+
+Every file written to `.data/helix/`, read back to confirm that the
+round trip preserves the dimensions.
+
+```{r}
+#| label: output-check
+files <- list.files(out, pattern = "\\.arrow$", full.names = TRUE)
+files <- files[basename(files) != "clean_dt.arrow"]   # built later by 01_data_prep
+do.call(rbind, lapply(files, function(f) {
+  tb <- read_feather(f, as_data_frame = FALSE)
+  data.frame(file = basename(f), rows = tb$num_rows, cols = tb$num_columns,
+             MB = round(file.size(f) / 2^20, 1))
+}))
+```
+
+## References
+
+::: {#refs}
+:::

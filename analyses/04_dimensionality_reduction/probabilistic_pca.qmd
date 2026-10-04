@@ -1,24 +1,32 @@
 ---
 title: "Probabilistic PCA with Turing"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Probabilistic PCA (`pPCA`), its Dirichlet-loading variant (`pPCA_dir`) and
-the ARD / supervised variants (`pPCA_ARD`, `spPCA`, `spPCA_ARD`), all in
-`src/models.jl`. First on a simulated block-structured expression matrix,
-then on untargeted metabolomics (ST001828, negative-mode urine panel),
-with NUTS and ADVI.
+## Introduction
 
-Sources: `EnvBRAN/ppca_turing.ipynb` (simulation), `met_classification/rca.jl`
-(metabolomics, ADVI, Dirichlet loadings), ARD/supervised models from
-`EnvBRAN/bayes_lib.jl`. The `pPCA_ARD` defined inside `ppca_turing.ipynb`
-(which had a degenerate `Normal(1.0, 0.0)` prior) was dropped in favour of
-the `bayes_lib.jl` version.
+Probabilistic PCA [@tipping1999ppca] (`pPCA`), its Dirichlet-loading variant (`pPCA_dir`) and
+the ARD [@bishop1999bayesianpca] / supervised variants (`pPCA_ARD`, `spPCA`, `spPCA_ARD`), all in
+`src/models.jl`. First on a simulated block-structured expression matrix,
+then on untargeted metabolomics (ST001828 [@sud2016metabolomicsworkbench], negative-mode urine panel),
+with NUTS [@hoffman2014nuts] and ADVI [@kucukelbir2017advi].
+
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distributions
 using Turing, ReverseDiff
@@ -32,6 +40,7 @@ A diagonal-block expression matrix with some non-informative genes (not all
 features differ between cells).
 
 ```{julia}
+#| label: simulated-expression-matrix
 n_genes = 90   # D
 n_cells = 600  # N
 mat_exp = randn(n_genes, n_cells)
@@ -43,6 +52,7 @@ mat_exp[(2 * (n_genes ÷ 3) + 1):end, (n_cells ÷ 2 + 1):end] .+= 10;
 components of choice.
 
 ```{julia}
+#| label: simulated-expression-matrix-2
 #| eval: false
 k = 2
 ppca = pPCA(permutedims(mat_exp), k)
@@ -57,6 +67,7 @@ Metabolites with ≤ 25 missing samples (out of 100), median-imputed and
 standardised (`omics_matrix`); first 10 metabolites to keep sampling fast.
 
 ```{julia}
+#| label: untargeted-metabolomics-st001828
 #| eval: false
 df    = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "covariates.arrow")));
 buneg = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "buneg.arrow")));
@@ -68,6 +79,7 @@ N, D = size(M_buneg)
 pPCA with ADVI and NUTS:
 
 ```{julia}
+#| label: untargeted-metabolomics-st001828-2
 #| eval: false
 ppca = pPCA(M_buneg, 2)
 res_vi = vi(ppca, q_meanfield_gaussian, 1000; show_progress = false);
@@ -85,6 +97,7 @@ scatter!(Zvi[1, :], Zvi[2, :]; label = "ADVI")     # sign of the axes is arbitra
 pPCA with Dirichlet (simplex) loadings and one component:
 
 ```{julia}
+#| label: untargeted-metabolomics-st001828-3
 #| eval: false
 ppca_dir = pPCA_dir(M_buneg, 1)
 chain_dir = sample(ppca_dir, NUTS(), 1000)
@@ -102,6 +115,7 @@ mat_rec = W * Z .+ repeat(μ; inner = (1, N))   # reconstruction (D × N)
 with shared latent factors.
 
 ```{julia}
+#| label: ard-and-supervised-ppca
 #| eval: false
 DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 x  = rescale(Matrix{Float64}(DT[:, names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log))]))
@@ -110,3 +124,8 @@ chain_ard  = sample(pPCA_ARD(x, 5), NUTS(), 500)
 chain_sard = sample(spPCA_ARD(x, y, 5), NUTS(), 500)
 chain_summary(chain_ard; pattern = "alpha")
 ```
+
+## References
+
+::: {#refs}
+:::

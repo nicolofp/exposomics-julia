@@ -1,24 +1,35 @@
 ---
 title: "SVD/PCA of omics matrices (metabolites, CpGs, miRNA)"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Quick spectral looks at three omics layers:
+## Introduction
 
-1. serum metabolites – eigen-decomposition of the covariance matrix;
+Quick spectral looks (eigen-decomposition, SVD and PCA [@golub2013matrix; @jolliffe2016pca])
+at three omics layers, two of them from GEO [@edgar2002geo]:
+
+1. HELIX serum metabolites [@vrijheid2014helix] – eigen-decomposition of the covariance matrix;
 2. placenta CpGs (GSE71678) – SVD of the standardised beta matrix;
 3. placenta miRNA and arsenic (GSE48355) – SVD vs PCA.
 
-Sources: `EnvBRAN/eigen_svd.jl`, `EnvBRAN/Untitled.ipynb` (CpG SVD),
-`EnvBRAN/As_miRNA.ipynb` (24 MB of stored outputs; only the 18 code cells
-were kept).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
-using DataFrames, Statistics, LinearAlgebra, Plots, CSV, HTTP, JSON
+using DataFrames, Statistics, LinearAlgebra, Plots, CSV
 using MultivariateStats
 using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
@@ -26,14 +37,13 @@ DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 
 ## Serum metabolites: eigenvalues of the covariance matrix
 
-The JSON was read from `https://provanik.s3.us-east-2.amazonaws.com/data_serum.json`
-(no longer available); place a copy in `.data/serum/data_serum.json`.
+HELIX serum metabolome (177 metabolites × 1198 children), as written by
+`00_data_ingestion/helix_data_ingestion.qmd`.
 
 ```{julia}
-#| eval: false
-jobj = JSON.parsefile(joinpath(DATA, "serum", "data_serum.json"))
-serum_sample = vcat(DataFrame.(jobj["serum_sample"])..., cols = :union);
-X = permutedims(Matrix{Float64}(serum_sample[:, 1:1198]))
+#| label: serum-metabolites-eigenvalues-of-the
+met_serum = DataFrame(Arrow.Table(joinpath(DATA, "helix", "met_serum.arrow")));   # metabolites × samples
+X = permutedims(Matrix{Float64}(met_serum[:, Not(:feature)]))   # samples × metabolites
 
 # covariance by hand (cov(X))
 X = X .- mean(X, dims = 1)
@@ -48,6 +58,7 @@ bar(eig_expl, xlabel = "Components", ylabel = "% var explained",
 ## Placenta CpGs (GSE71678)
 
 ```{julia}
+#| label: placenta-cpgs-gse71678
 #| eval: false
 cpgs = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cpgs_original.arrow")));
 matcpgs = rescale(permutedims(Matrix{Float64}(cpgs[:, 2:end])); dims = 1);
@@ -63,6 +74,7 @@ Birth-weight z-scores from an external reference table (`bw.csv`, mean and
 SD by sex and completed gestational week).
 
 ```{julia}
+#| label: placenta-mirna-and-arsenic-gse48355
 #| eval: false
 df = DataFrame(Arrow.Table(joinpath(DATA, "GSE48355", "GSE48355_cov_original.arrow")));
 rename!(df, [:ID, :smk, :gestage, :bw_g, :sex, :tissue, :UAs_spg, :DAs, :species, :mage])
@@ -73,6 +85,7 @@ DT.bw_zscore = (DT.bw_g .- DT.mean) ./ DT.std;
 ```
 
 ```{julia}
+#| label: placenta-mirna-and-arsenic-gse48355-2
 #| eval: false
 miRNA = DataFrame(Arrow.Table(joinpath(DATA, "GSE48355", "GSE48355_miRNA.arrow")));
 miRNA = miRNA[:, intersect(names(miRNA), vcat("ID_REF", DT.ID))];
@@ -84,9 +97,15 @@ pcaRNA = fit(PCA, matRNA; maxoutdim = 2)
 ```
 
 ```{julia}
+#| label: placenta-mirna-and-arsenic-gse48355-3
 #| eval: false
 scatter(svdRNA.U[:, 1], svdRNA.U[:, 2], mc = PALETTE[1], label = "SVD",
         markersize = 3, markerstrokewidth = 0)
 scatter!(-projection(pcaRNA)[:, 1], -projection(pcaRNA)[:, 2], mc = PALETTE[2], label = "PCA",
          markersize = 3, markerstrokewidth = 0)
 ```
+
+## References
+
+::: {#refs}
+:::

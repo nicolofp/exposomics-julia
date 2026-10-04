@@ -1,49 +1,62 @@
 ---
 title: "High-dimensional elastic-net regression: postnatal exposome and urine metabolome"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Correlation between the HELIX postnatal (childhood) chemical exposures and
-44 urinary metabolites, and lasso / ridge / elastic-net regression of a
+## Introduction
+
+Correlation between the HELIX [@vrijheid2014helix] postnatal (childhood) chemical exposures and
+44 urinary metabolites, and lasso [@tibshirani1996lasso] / ridge [@hoerl1970ridge] / elastic-net [@zou2005elasticnet] regression of a
 metabolite on the exposures with a grid search and subsampling stability.
 
-Source: `EnvBRAN/umet_exposure.ipynb` (the `.md` export and figures were dropped).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes], Convex.jl [@udell2014convex] and SCS [@odonoghue2016scs].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distances
 using Convex, SCS
-using CSV
+using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Data
+
 ```{julia}
-#| eval: false
-codebook  = CSV.read(joinpath(DATA, "helix", "codebook.tsv"), DataFrame; delim = '\t');
-met_urine = CSV.read(joinpath(DATA, "helix", "met_urine.tsv"), DataFrame; delim = '\t');
-exposure  = CSV.read(joinpath(DATA, "helix", "covariates.tsv"), DataFrame; delim = '\t');
+#| label: data
+codebook  = DataFrame(Arrow.Table(joinpath(DATA, "helix", "codebook.arrow")));
+met_urine = DataFrame(Arrow.Table(joinpath(DATA, "helix", "met_urine.arrow")));   # metabolites × samples
+exposure  = DataFrame(Arrow.Table(joinpath(DATA, "helix", "exposome.arrow")));
 
 tmp = filter([:period, :var_type, :domain, :period_postnatal, :family] => (x, y, z, w, p) ->
                  x == "Postnatal" && y == "numeric" && z != "Covariates" && z != "Phenotype" &&
-                 (w == "NA" || contains(w, "Year")) &&
+                 (ismissing(w) || contains(w, "Year")) &&
                  !any(contains.(p, ["Traffic", "Social and economic capital", "Built environment",
                                     "Indoor air", "Lifestyle", "Natural Spaces"])),
              codebook);
 var_name = vcat("ID", tmp.variable_name)
 environmental = exposure[:, var_name];
 
-met_urine = permutedims(met_urine[:, vcat(1, 8:1199)], 1)
-met_urine.rn = parse.(Int64, met_urine.rn);
-DT = innerjoin(environmental, met_urine, on = :ID => :rn);
+met_urine = permutedims(met_urine, :feature, :ID)    # samples × metabolites
+DT = innerjoin(environmental, met_urine, on = :ID);
 ```
 
 Exposure × metabolite correlations:
 
 ```{julia}
-#| eval: false
+#| label: data-2
 M  = cor(Matrix{Float64}(DT[:, 2:end]))
 ne = length(var_name) - 1
 MC = M[1:ne, (ne + 1):(ne + 44)]
@@ -56,6 +69,7 @@ heatmap(MC, fc = cgrad(:plasma); yticks = (1:ne, tmp.labels), xrot = 90,
 $$\sum_{i=1}^{n} \left( y_i - \beta_0 - \sum_{j=1}^{p} \beta_j x_{ij} \right)^2 + \lambda||\beta||_2^2 + \nu ||\beta||_1$$
 
 ```{julia}
+#| label: lasso-ridge-elastic-net
 """
     LassoEN(Y, X, γ, λ = 0)
 
@@ -85,6 +99,7 @@ end
 Grid search over (γ, λ) for metabolite 25:
 
 ```{julia}
+#| label: lasso-ridge-elastic-net-2
 #| eval: false
 Y = Array{Float64}(DT.metab_25)
 X = Matrix{Float64}(DT[:, tmp.variable_name]);
@@ -104,6 +119,7 @@ EN_opt[EN_opt.MAE .== minimum(EN_opt.MAE), :]
 Stability of the lasso coefficients over 5000 subsamples of 835 children:
 
 ```{julia}
+#| label: lasso-ridge-elastic-net-3
 #| eval: false
 γ, λ = 0.052, 0
 betas = fill(NaN, 5000, size(X, 2))
@@ -118,3 +134,8 @@ LR = DataFrame(Names = tmp.labels,
 LR.Sig = credible_nonzero(LR.q025, LR.q975)
 show(LR[LR.Sig, :])
 ```
+
+## References
+
+::: {#refs}
+:::

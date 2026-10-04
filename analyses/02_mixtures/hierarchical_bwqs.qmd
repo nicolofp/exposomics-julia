@@ -1,20 +1,30 @@
 ---
 title: "Hierarchical BWQS (random intercepts and mixture slopes)"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Hierarchical extension of BWQS where each group (e.g. cohort) has its own
-intercept and its own mixture effect, with partial pooling. The model
+## Introduction
+
+Hierarchical extension of BWQS [@colicino2020bwqs] where each group (e.g. cohort) has its own
+intercept and its own mixture effect, with partial pooling [@gelman2013bda]. The model
 `hbwqs` is in `src/models.jl`.
 
-Source: `met_classification/bwqshd.jl` (the vectorised `hbwqs2` was the
-version actually sampled; the per-observation loop version `hbwqs` with a
-single slope SD was dropped as superseded).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, CSV, HTTP, Statistics
 using Turing, ReverseDiff
@@ -31,6 +41,7 @@ Example dataset from <https://storopoli.io/Bayesian-Julia/pages/11_multilevel_mo
 * `y`: rating of the cheese
 
 ```{julia}
+#| label: toy-multilevel-example
 url = "https://raw.githubusercontent.com/storopoli/Bayesian-Julia/master/datasets/cheese.csv"
 cheese = CSV.read(HTTP.get(url).body, DataFrame)
 
@@ -42,6 +53,7 @@ first(cheese, 5)
 ```
 
 ```{julia}
+#| label: toy-multilevel-example-2
 X   = Matrix(select(cheese, Between(:cheese_A, :cheese_D)));
 y   = cheese[:, :y];
 idx = cheese[:, :background_int];
@@ -53,6 +65,7 @@ idx = cheese[:, :background_int];
 `UAs_q … UPb_q`, covariates in columns 8–12 and 15–17, cohort index.
 
 ```{julia}
+#| label: exposure-mixture-by-cohort
 #| eval: false
 DT  = CSV.read(joinpath(DATA, "bwqs_tmp.csv"), DataFrame)
 M   = Matrix(select(DT, Between(:UAs_q, :UPb_q)));
@@ -64,3 +77,8 @@ model_h = hbwqs(M, X, idx, y)
 chain_h = sample(model_h, NUTS(; adtype = AutoReverseDiff(; compile = true)), 1000)
 chain_summary(chain_h; pattern = "w[")
 ```
+
+## References
+
+::: {#refs}
+:::

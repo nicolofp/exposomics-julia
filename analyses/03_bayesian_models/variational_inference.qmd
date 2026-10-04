@@ -1,14 +1,21 @@
 ---
 title: "Variational inference using Julia"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-### Introduction
+## Introduction
 
-Variational inference is a type of probabilistic inference algorithm that approximates complex probability distributions using simpler, tractable distributions. It is commonly used in machine learning and statistical modeling to estimate the parameters of a model or to compute the posterior distribution of a set of latent variables given some observed data.
+Variational inference [@blei2017vi] is a type of probabilistic inference algorithm that approximates complex probability distributions using simpler, tractable distributions. It is commonly used in machine learning and statistical modeling to estimate the parameters of a model or to compute the posterior distribution of a set of latent variables given some observed data.
 
 The basic idea behind variational inference is to define a family of tractable probability distributions, called the variational family, that approximates the true, but often intractable, posterior distribution. The goal is to find the member of the variational family that is closest to the true posterior distribution in terms of a distance metric such as the Kullback-Leibler (KL) divergence: $$KL(P||Q)=\sum_{x}P(x)\log(\frac{P(x)}{Q(x)})$$
 
@@ -20,16 +27,19 @@ Once the optimization is complete, the resulting variational distribution can be
 
 Variational inference is a powerful and flexible method for probabilistic inference, and has been applied to a wide range of problems in machine learning and statistics, including Bayesian modeling, deep learning, and reinforcement learning.
 
-Source: `EnvBRAN/variational_inference.ipynb`. Load the libraries used in the script:
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using Turing, LinearAlgebra, Statistics, DataFrames
 using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
-### Linear Bayesian regression
+## Linear Bayesian regression
 
 The model `linear_regression` (in `src/models.jl`) has a truncated-normal
 prior on the variance, `Normal(0, √3)` on the intercept and
@@ -48,6 +58,7 @@ The resulting variational distribution can be used to estimate the posterior pro
 Variational inference for variable selection can be extended to handle more complex models, such as hierarchical models and models with interactions between variables. It is a powerful and flexible method that can be used to address a wide range of statistical inference problems.
 
 ```{julia}
+#| label: linear-bayesian-regression
 df  = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 sel = vcat(["h_mbmi_None", "hs_wgtgain_None", "h_age_None"], names(df, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log)))
 Xdt = Matrix{Float64}(df[:, sel])
@@ -55,14 +66,15 @@ Ydt = Array{Float64}(df.bw_zscore);
 ```
 
 ```{julia}
+#| label: linear-bayesian-regression-2
 m = linear_regression(Xdt, Ydt)
 ```
 
-ADVI with a mean-field Gaussian family and 1000 iterations (the original used
-`vi(m, ADVI(30, 1000))`, the pre-0.40 Turing API with 30 Monte Carlo samples
-per gradient step):
+Automatic differentiation variational inference (ADVI) [@kucukelbir2017advi]
+with a mean-field Gaussian family and 1000 iterations:
 
 ```{julia}
+#| label: linear-bayesian-regression-3
 #| eval: false
 res = vi(m, q_meanfield_gaussian, 1000; show_progress = false);
 draws_vi = [rand(res) for _ in 1:1000];      # samples in the original (constrained) space
@@ -70,6 +82,7 @@ advi_sample = hcat([vcat(d[@varname(σ₂)], d[@varname(intercept)], d[@varname(
 ```
 
 ```{julia}
+#| label: linear-bayesian-regression-4
 #| eval: false
 labels = vcat("sigma", "Intercept", sel)
 res = DataFrame(parameters = labels,
@@ -78,3 +91,8 @@ res = DataFrame(parameters = labels,
                 advi_q975  = [quantile(advi_sample[i, :], 0.975) for i in eachindex(labels)])
 show(res)
 ```
+
+## References
+
+::: {#refs}
+:::

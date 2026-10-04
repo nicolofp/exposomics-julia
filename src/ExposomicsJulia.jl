@@ -14,7 +14,7 @@ Contents:
 * `plotting.jl` – small plotting helpers (colour palettes, embeddings).
 
 Analyses load it with `using ExposomicsJulia` after activating this project
-(`julia --project=.` from the repo root, or the Quarto `exeflags`).
+(`julia --project=.` from the repo root; Quarto finds `Project.toml` on its own).
 """
 module ExposomicsJulia
 

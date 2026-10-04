@@ -1,33 +1,48 @@
 ---
 title: "Kernel PCA, UMAP and t-SNE of HELIX exposures"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Kernel PCA (hand-written and with `MultivariateStats`), UMAP and t-SNE on
-the HELIX pregnancy exposures. The chemical-level embeddings are coloured by
+## Introduction
+
+Kernel PCA [@scholkopf1998kpca] (hand-written and with `MultivariateStats`),
+UMAP [@mcinnes2018umap] and t-SNE [@vandermaaten2008tsne] on the HELIX pregnancy
+exposures [@vrijheid2014helix]. The chemical-level embeddings are coloured by
 exposure family, the subject-level ones by cohort.
 
-Source: `EnvBRAN/dim_reduction.jl`.
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, Distances, Random
 using MultivariateStats, UMAP, TSne
-using CSV
+using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
-The HELIX tables were read from the public `envbran` bucket; the code
-reads the local copies in `.data/helix/*.tsv`. The bucket is no longer public, so the
-chunks that need these tables are not evaluated (`eval: false`).
+## Data
+
+HELIX codebook, covariates and exposures, as written by
+`00_data_ingestion/helix_data_ingestion.qmd`.
 
 ```{julia}
-#| eval: false
-codebook = CSV.read(joinpath(DATA, "helix", "codebook.tsv"), DataFrame; delim = '\t');
-exposure = CSV.read(joinpath(DATA, "helix", "covariates.tsv"), DataFrame; delim = '\t');
+#| label: data
+codebook = DataFrame(Arrow.Table(joinpath(DATA, "helix", "codebook.arrow")));
+exposure = innerjoin(DataFrame(Arrow.Table(joinpath(DATA, "helix", "covariates.arrow"))),
+                     DataFrame(Arrow.Table(joinpath(DATA, "helix", "exposome.arrow"))), on = :ID);
 
 exposure_list = filter([:period, :var_type, :domain, :variable_name] => (x, y, z, k) ->
                            x == "Pregnancy" && y == "numeric" && z != "Covariates" &&
@@ -41,10 +56,10 @@ cohort = string.(exposure.h_cohort);
 
 ## Kernel PCA by hand (toy example)
 
-Two concentric circles (the original used `SyntheticDatasets.make_circles`,
-which needs Python/scikit-learn; replaced by an equivalent generator).
+Two concentric circles.
 
 ```{julia}
+#| label: kernel-pca-by-hand-toy
 function make_circles(n; noise = 0.1, factor = 0.2, rng = MersenneTwister(123))
     θ = 2π .* rand(rng, n)
     lab = rand(rng, Bool, n)
@@ -57,6 +72,7 @@ scatter(Xc[:, 1], Xc[:, 2], color = ifelse.(labc, "aqua", "coral2"), size = (400
 ```
 
 ```{julia}
+#| label: kernel-pca-by-hand-toy-2
 """Gaussian-kernel PCA of the rows of `X` (observations × features)."""
 function kernel_pca(X; g = 0.01)
     K1 = exp.(-g .* pairwise(SqEuclidean(), X, dims = 1))
@@ -78,7 +94,7 @@ scatter(amp_c[1, :], amp_c[2, :], color = ifelse.(labc, "aqua", "coral2"), size 
 Chemicals as observations (coloured by family):
 
 ```{julia}
-#| eval: false
+#| label: kernel-pca-of-the-exposures
 X = Matrix{Float64}(environmental)            # subjects × exposures
 amplitudes = kernel_pca(permutedims(X); g = 0.01)
 scatter(amplitudes[1, :], amplitudes[2, :], color = color_chemicals, size = (400, 300), label = "")
@@ -87,7 +103,7 @@ scatter(amplitudes[1, :], amplitudes[2, :], color = color_chemicals, size = (400
 Subjects as observations (coloured by cohort) with `MultivariateStats`:
 
 ```{julia}
-#| eval: false
+#| label: kernel-pca-of-the-exposures-2
 M = fit(KernelPCA, permutedims(rescale(X)); kernel = (x, y) -> exp(-15 * norm(x - y)^2),
         maxoutdim = 2, inverse = true)
 Yte = MultivariateStats.predict(M, permutedims(rescale(X)))
@@ -97,7 +113,7 @@ scatter_embedding(Yte; groups = cohort)
 ## UMAP and t-SNE of the chemicals
 
 ```{julia}
-#| eval: false
+#| label: umap-and-t-sne-of
 embedding = UMAP.fit(X).embedding                  # columns (= exposures) are the points
 Y = tsne(permutedims(rescale(X)), 2, 50, 10000, 5.0)
 p = scatter(Y[:, 1], Y[:, 2], color = color_chemicals, xlabel = "Component 1",
@@ -106,3 +122,8 @@ q = scatter(embedding[1, :], embedding[2, :], color = color_chemicals, xlabel = 
             ylabel = "Component 2", label = "", title = "UMAP")
 plot(p, q, layout = (1, 2), legend = false, size = (850, 300))
 ```
+
+## References
+
+::: {#refs}
+:::

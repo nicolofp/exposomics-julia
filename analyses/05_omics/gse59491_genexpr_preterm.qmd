@@ -1,19 +1,30 @@
 ---
 title: "GSE59491: maternal blood gene expression, preterm birth and gestational age"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Maternal blood gene expression (GEO **GSE59491**) at the first sampling
+## Introduction
+
+Maternal blood gene expression (GEO **GSE59491** [@edgar2002geo]) at the first sampling
 time point: SVD, Welch t-tests between birth outcomes and a gene-wise
 association scan with gestational age at delivery.
 
-Source: `met_classification/GA_genexpr.jl` (its regression loop wrote into
-an undefined `RExp`; replaced by `exposure_scan`).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Random, LinearAlgebra, Distributions, Statistics, StatsBase
 using HypothesisTests, Plots
@@ -21,7 +32,10 @@ using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Analysis
+
 ```{julia}
+#| label: analysis
 #| eval: false
 df      = DataFrame(Arrow.Table(joinpath(DATA, "GSE59491", "GSE59491_cov.arrow")));
 genexpr = DataFrame(Arrow.Table(joinpath(DATA, "GSE59491", "GSE59491_genexpr.arrow")));
@@ -38,6 +52,7 @@ gene_ids = string.(genexpr.ID_REF)
 SVD (no evident cluster):
 
 ```{julia}
+#| label: analysis-2
 #| eval: false
 svd_genexpr = svd(X_genexpr)
 scatter(svd_genexpr.U[:, 1], svd_genexpr.U[:, 2], label = "")
@@ -47,6 +62,7 @@ svd_genexpr.S .^ 2 / sum(svd_genexpr.S .^ 2)
 Mean difference between birth outcomes (Welch t-test, Bonferroni):
 
 ```{julia}
+#| label: analysis-3
 #| eval: false
 pvals = zeros(size(X_genexpr, 2))
 Threads.@threads for i in 1:size(X_genexpr, 2)
@@ -60,8 +76,14 @@ T_genexpr[T_genexpr.bonferroni, :]
 Gene-wise regression of gestational age:
 
 ```{julia}
+#| label: analysis-4
 #| eval: false
 ewas_results = exposure_scan(Float64.(df1.gestage), X_genexpr; names = gene_ids)
 scatter(df1.gestage, X_genexpr[:, gene_ids .== "30850_at"], label = "30850_at")
 histogram(X_genexpr[:, 1])
 ```
+
+## References
+
+::: {#refs}
+:::

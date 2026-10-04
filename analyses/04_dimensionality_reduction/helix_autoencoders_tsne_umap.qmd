@@ -1,21 +1,30 @@
 ---
 title: "Encoder-based dimensionality reduction of the pregnancy exposome"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Non-linear 2-D embeddings of the 57 HELIX pregnancy exposures: a deep
-autoencoder, t-SNE, UMAP and a variational autoencoder, coloured by cohort.
+## Introduction
 
-Source: `EnvBRAN/dim_red_aut.ipynb` (the `.md` export and its SVG figures
-were dropped).
+Non-linear 2-D embeddings of the 57 HELIX pregnancy exposures [@vrijheid2014helix]: a deep
+autoencoder [@hinton2006autoencoder], t-SNE [@vandermaaten2008tsne], UMAP [@mcinnes2018umap]
+and a variational autoencoder [@kingma2014vae], coloured by cohort.
 
-Ported from the implicit-parameter Flux API (`Flux.params`, `train!(loss, ps, data, opt)`)
-to the explicit API of Flux ≥ 0.15 (`Flux.setup`, `train!(loss, model, data, state)`).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Flux.jl [@innes2018flux].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots
 using Flux, UMAP, TSne
@@ -23,7 +32,10 @@ using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Data
+
 ```{julia}
+#| label: data
 DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 M_exp = Matrix{Float32}(rescale(Matrix{Float32}(DT[:, names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log))]); dims = 1));
 X_all = permutedims(M_exp)                       # features × samples (Flux convention)
@@ -34,6 +46,7 @@ cohort = string.(DT.h_cohort);
 ## Autoencoder
 
 ```{julia}
+#| label: autoencoder
 r = size(M_exp, 2)
 model = Chain(Dense(r, 150, leakyrelu), Dense(150, 70, leakyrelu),
               Dense(70, 20, leakyrelu), Dense(20, 2, leakyrelu),     # encoder
@@ -45,6 +58,7 @@ ae_loss(model, X_all)
 ```
 
 ```{julia}
+#| label: autoencoder-2
 #| eval: false
 opt_state = Flux.setup(Adam(), model)
 for epoch in 1:1000
@@ -54,6 +68,7 @@ ae_loss(model, X_all)
 ```
 
 ```{julia}
+#| label: autoencoder-3
 #| eval: false
 model_encoder = model[1:4]
 dt_red = model_encoder(X_all);
@@ -63,20 +78,23 @@ scatter_embedding(dt_red; groups = cohort, title = "Cluster Encoder")
 ## t-SNE and UMAP
 
 ```{julia}
+#| label: t-sne-and-umap
 #| eval: false
 y_tsne = tsne(M_exp, 2, 57, 1000, 30, pca_init = true, progress = false);
 scatter_embedding(y_tsne; groups = cohort, title = "Clusters T-Sne")
 ```
 
 ```{julia}
+#| label: t-sne-and-umap-2
 #| eval: false
 umap_model = UMAP.fit(X_all, 2).embedding
 scatter_embedding(umap_model; groups = cohort, title = "Clusters UMAP")
 ```
 
-# Variational autoencoder
+## Variational autoencoder
 
 ```{julia}
+#| label: variational-autoencoder
 vae = (encoder = Chain(Dense(r, 20, leakyrelu), Parallel(tuple, Dense(20, 2), Dense(20, 2))),
        decoder = Chain(Dense(2, 20, leakyrelu), Dense(20, r)))
 
@@ -103,6 +121,7 @@ vae_loss(vae, X_all)
 ```
 
 ```{julia}
+#| label: variational-autoencoder-2
 #| eval: false
 opt_state = Flux.setup(Adam(0.001), vae)
 for epoch in 1:50
@@ -112,7 +131,13 @@ vae_loss(vae, X_all)
 ```
 
 ```{julia}
+#| label: variational-autoencoder-3
 #| eval: false
 data_reduced = vae.encoder(X_all)    # (μ, logσ)
 scatter_embedding(data_reduced[1]; groups = cohort, title = "Cluster Variational Encoder")
 ```
+
+## References
+
+::: {#refs}
+:::

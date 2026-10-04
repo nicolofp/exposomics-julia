@@ -1,29 +1,42 @@
 ---
 title: "Negative binomial regression with ARD priors"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Simulation check of negative-binomial count regression (e.g. for RNA-seq /
+## Introduction
+
+Simulation check of negative-binomial count regression [@hilbe2011negbin] (e.g. for RNA-seq /
 miRNA counts) parameterised by mean and overdispersion
-(`NegativeBinomial2`), comparing an ARD prior (`nb_regression_ard`) with
+(`NegativeBinomial2`), comparing an ARD prior [@tipping2001rvm] (`nb_regression_ard`) with
 vague Normal priors (`negbin_regression`). Models in `src/models.jl`.
 
-Source: negative-binomial part of `met_classification/bayesian_stuff.jl`
-(the looped `NegativeBinomialRegression` and vectorised `negbinreg` were the
-same model; only the vectorised one is kept).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using LinearAlgebra, Distributions, Statistics, StatsBase, Random
 using Turing, ReverseDiff
 ```
 
+## Simulation
+
 Simulated data: 200 observations, 5 predictors, `ϕ = 0.82`.
 
 ```{julia}
+#| label: simulation
 Random.seed!(1234)
 X = rand(Normal(0.0, 0.8), 200, 5)
 betas = [0.3, -0.5, 1.2, 0.5, -1.1]
@@ -33,6 +46,7 @@ y = [rand(NegativeBinomial2(m_sim[i], phi_sim)) for i in 1:200];
 ```
 
 ```{julia}
+#| label: simulation-2
 #| eval: false
 sampler = NUTS(; adtype = AutoReverseDiff(; compile = true))
 chain_ard = sample(nb_regression_ard(X, y), sampler, 5000);
@@ -42,6 +56,12 @@ chain_nb  = sample(negbin_regression(X, y), sampler, 5000);
 Posterior means of the slopes vs the truth:
 
 ```{julia}
+#| label: simulation-3
 #| eval: false
 hcat(posterior_mean(chain_ard, :β₁), posterior_mean(chain_nb, :β), betas)
 ```
+
+## References
+
+::: {#refs}
+:::

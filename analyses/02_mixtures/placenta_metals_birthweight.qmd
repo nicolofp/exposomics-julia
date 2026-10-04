@@ -1,20 +1,32 @@
 ---
 title: "Birth weight and placenta metals"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 execute:
   eval: false   # input data not in the repo
 ---
 
+## Introduction
+
 Placental metal concentrations (Al, Cr, Ni, Se, Co, Pb) and birth-weight
 z-score in the New Hampshire Birth Cohort placenta methylation study
-(GEO **GSE71678**), with linear regression and a random-forest comparison.
+(GEO **GSE71678** [@edgar2002geo]), with linear regression and a random-forest comparison.
 
-Source: `EnvBRAN/bw_placenta_metals.ipynb`.
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distributions
 using DecisionTree
@@ -22,7 +34,10 @@ using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Data
+
 ```{julia}
+#| label: data
 df = DataFrame(Arrow.Table(joinpath(DATA, "GSE71678", "GSE71678_cov_original.arrow")));
 df = df[completecases(df[:, ["gestational age", "infant gender", "birth weight (grams)"]]), :];
 ```
@@ -30,6 +45,7 @@ df = df[completecases(df[:, ["gestational age", "infant gender", "birth weight (
 Gestational-age classes (weeks, < 37 collapsed to 36 and > 41 to 42):
 
 ```{julia}
+#| label: data-2
 df.gestage_cat = ceil.(df[:, "gestational age"]);
 df[df.gestage_cat .< 37, :gestage_cat] .= 36
 df[df.gestage_cat .> 41, :gestage_cat] .= 42;
@@ -42,6 +58,7 @@ countmap(df[:, "gestage_cat"])
 Birth-weight z-score within gestational-age class and sex:
 
 ```{julia}
+#| label: data-3
 df = add_zscore(df, "birth weight (grams)", ["gestage_cat", "infant gender"]; name = :bw_zscore);
 df = df[completecases(df[:, ["bw_zscore", "mom_education", "parity", "ever_smoker", "gestational_diabetes",
                              "maternal age", "placenta_al", "placenta_cr", "placenta_ni", "placenta_se",
@@ -51,6 +68,7 @@ df = df[completecases(df[:, ["bw_zscore", "mom_education", "parity", "ever_smoke
 Binary covariates:
 
 ```{julia}
+#| label: data-4
 df.gest_diabetis = df[:, "gestational_diabetes"] .== "Yes";
 df.smoking       = df[:, "ever_smoker"] .== "Yes";
 df.parity_bin    = df[:, "parity"] .> 0;
@@ -59,6 +77,7 @@ countmap(df[:, "maternal race"])
 ```
 
 ```{julia}
+#| label: data-5
 dft = df[:, ["bw_zscore", "low_education", "parity_bin", "smoking", "gest_diabetis", "maternal age",
              "placenta_al", "placenta_cr", "placenta_ni", "placenta_se", "placenta_co", "placenta_pb"]];
 show(dft)
@@ -77,6 +96,7 @@ Where, y is the dependent variable, x is the independent variable, $\beta_0$ is 
 The goal of linear regression is to estimate the values of the coefficients, $\beta_0$ and $\beta_1$, based on the data, so that we can make predictions about the dependent variable for new values of the independent variable.
 
 ```{julia}
+#| label: linear-regression
 y = Array{Float64}(dft[:, "bw_zscore"])
 z = hcat(ones(size(dft, 1)), Matrix{Float64}(dft[:, 2:end]));
 
@@ -85,6 +105,7 @@ show(results, allcols = true)
 ```
 
 ```{julia}
+#| label: linear-regression-2
 fit = ols(z, y)
 m = fit_metrics(y, z * fit.β, size(z, 2))
 println("R²     - ", round(m.R²; digits = 4))
@@ -94,7 +115,7 @@ println("MSE    - ", round(m.MSE; digits = 4))
 
 ## Random forest regression
 
-A random forest is a machine learning algorithm that is commonly used for classification and regression tasks. It belongs to the family of ensemble methods, which combine multiple models to improve predictive performance.
+A random forest [@breiman2001rf] is a machine learning algorithm that is commonly used for classification and regression tasks. It belongs to the family of ensemble methods, which combine multiple models to improve predictive performance.
 
 The basic idea of a random forest is to create a large number of decision trees, each of which is trained on a random subset of the available data and features. Then, the predictions of all the trees are aggregated to make a final prediction.
 
@@ -114,6 +135,7 @@ $$\hat{y} = \text{RF}(x) = \text{agg}(f_1(x), f_2(x), ..., f_K(x))$$
 where $\hat{y}$ is the predicted label for the input vector $x$, $\text{RF}$ denotes the random forest function, $\text{agg}$ is the aggregation function (e.g., mode or mean), and $f_k(x)$ is the prediction of the $k$-th decision tree on $x$.
 
 ```{julia}
+#| label: random-forest-regression
 x = Matrix{Float64}(dft[:, 2:end]);
 
 # build_forest(labels, features, n_subfeatures, n_trees, partial_sampling,
@@ -126,3 +148,8 @@ println("R²     - ", round(m.R²; digits = 4))
 println("Adj.R² - ", round(m.adjR²; digits = 4))
 println("MSE    - ", round(m.MSE; digits = 4))
 ```
+
+## References
+
+::: {#refs}
+:::

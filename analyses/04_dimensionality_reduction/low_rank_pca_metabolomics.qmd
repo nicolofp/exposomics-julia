@@ -1,26 +1,38 @@
 ---
 title: "PCA and low-rank models for metabolomics and miRNA"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-PCA of untargeted urine metabolomics (ST001828, negative mode) and of
-placental miRNA (GSE108497), plus a non-negative/simplex low-rank
-factorisation (GLRM).
+## Introduction
 
-Sources: `met_classification/dim_reduction.jl` and
-`met_classification/clustering_cpgs.jl`.
+PCA [@jolliffe2016pca] of untargeted urine metabolomics (Metabolomics Workbench
+ST001828 [@sud2016metabolomicsworkbench], negative mode) and of placental miRNA
+(GEO GSE108497 [@edgar2002geo]), plus a non-negative/simplex low-rank
+factorisation (GLRM) [@udell2016glrm].
 
 ::: {.callout-warning}
-The originals used `LowRankModels.jl` (`pca`, `qpca`, `GLRM`), which is not
+`LowRankModels.jl` (`pca`, `qpca`, `GLRM`) is not
 installable together with current DataFrames (it requires DataFrames < 0.22).
 PCA is done here with `MultivariateStats`; the GLRM section is kept for
 reference and needs a separate environment with `LowRankModels`.
 :::
 
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes].
+
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots
 using MultivariateStats
@@ -33,6 +45,7 @@ DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 Metabolites with ≤ 25 missing samples, median-imputed, standardised.
 
 ```{julia}
+#| label: st001828-urine-metabolites-negative-mode
 #| eval: false
 df    = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "covariates.arrow")));
 buneg = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "buneg.arrow")));
@@ -47,6 +60,7 @@ scatter(Z[1, :], Z[2, :], label = "", title = "PCA ST001828 (10 metabolites)")
 Simplex-constrained low-rank model (requires `LowRankModels`):
 
 ```{julia}
+#| label: st001828-urine-metabolites-negative-mode-2
 #| eval: false
 using LowRankModels
 simplex_pca = GLRM(M10, QuadLoss(), SimplexConstraint(), ZeroReg(), 10)
@@ -60,6 +74,7 @@ X' * Y
 Only miRNAs without missing values.
 
 ```{julia}
+#| label: gse108497-placental-mirna
 #| eval: false
 mirna = DataFrame(Arrow.Table(joinpath(DATA, "GSE108497", "GSE108497_miRNA_norm.arrow")));
 M_df, ids = omics_matrix(mirna, :ID_REF, 2:513; max_missing = 0)
@@ -67,3 +82,8 @@ pca_mirna = fit(PCA, permutedims(M_df); maxoutdim = 2)   # was LowRankModels.qpc
 Zm = predict(pca_mirna, permutedims(M_df))
 scatter(Zm[1, :], Zm[2, :], label = "", title = "PCA GSE108497 miRNA")
 ```
+
+## References
+
+::: {#refs}
+:::

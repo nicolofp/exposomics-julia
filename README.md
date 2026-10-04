@@ -20,6 +20,7 @@ exposomics-julia/
 │   ├── models.jl                     # Turing models: BWQS family, ARD, negative binomial, Gamma–Poisson, pPCA
 │   └── plotting.jl                   # palette, group codes, embedding scatter
 ├── analyses/
+│   ├── 00_data_ingestion/            # raw releases (R formats) → Arrow files in .data/ (R/knitr)
 │   ├── 01_data_prep/                 # building analysis datasets
 │   ├── 02_mixtures/                  # BWQS and hierarchical BWQS mixture models
 │   ├── 03_bayesian_models/           # ARD, ADVI, RxInfer, negative binomial, Gamma–Poisson, GMM

@@ -1,18 +1,30 @@
 ---
 title: "Bayesian mixture (BWQS) of prenatal metals and birth weight"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Import the clean HELIX dataset and analyse the mixture of chemicals with
-Bayesian weighted quantile sum (BWQS) regression. The models (`bwqs`,
-`bwqs_adv`) live in `src/models.jl` and are fitted with `Turing.jl`.
+## Introduction
 
-Source: `EnvBRAN/b_mixture.ipynb` (models from `EnvBRAN/bayes_lib.jl`).
+Import the clean HELIX dataset [@vrijheid2014helix] and analyse the mixture of chemicals with
+Bayesian weighted quantile sum (BWQS) regression [@carrico2015wqs; @colicino2020bwqs]. The models (`bwqs`,
+`bwqs_adv`) live in `src/models.jl` and are fitted with the No-U-Turn sampler [@hoffman2014nuts].
+
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, StatsBase, Distributions
 using Turing, ReverseDiff, JLD2
@@ -20,9 +32,12 @@ using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Data and model
+
 Import the clean dataset produced by `01_data_prep/helix_dataset_preparation.qmd`.
 
 ```{julia}
+#| label: data-and-model
 DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 ```
 
@@ -32,6 +47,7 @@ covariates are **maternal BMI pre-pregnancy**, **weight gained during
 pregnancy** and **maternal age**. The outcome is the birth-weight z-score.
 
 ```{julia}
+#| label: data-and-model-2
 metals  = names(DT)[contains.(names(DT), "m_Log2")][1:9];
 covar   = ["h_mbmi_None", "hs_wgtgain_None", "h_age_None"];
 outcome = "bw_zscore";
@@ -44,15 +60,16 @@ ecdf_score!(mx; scale = 10)   # deciles-like ECDF scores (0–10)
 ```
 
 ```{julia}
+#| label: data-and-model-3
 model     = bwqs(cx, mx, y);
 model_adv = bwqs_adv(cx, mx, y);
 ```
 
-Sampling is slow, so the chains are cached in `results/` (the original
-notebook saved them as `mix_sim_chain.jld2` / `mix_adv_chain.jld2`); delete
-the files to re-sample.
+Sampling is slow, so the chains are cached in `results/`
+(`mix_sim_chain.jld2` / `mix_adv_chain.jld2`); delete the files to re-sample.
 
 ```{julia}
+#| label: data-and-model-4
 sampler = NUTS(0.65; adtype = AutoReverseDiff(; compile = true))
 function cached_chain(file, model)
     path = joinpath(pkgdir(ExposomicsJulia), "results", file); mkpath(dirname(path))
@@ -68,6 +85,7 @@ chain_adv = cached_chain("mix_adv_chain.jld2", model_adv);
 Mixture effect (`beta`): posterior median and 95% credible interval.
 
 ```{julia}
+#| label: data-and-model-5
 for (lab, ch) in ("bwqs" => chain, "bwqs_adv" => chain_adv)
     b = draws(ch, :beta)
     q = round.(quantile(b, [0.5, 0.025, 0.975]); digits = 4)
@@ -78,7 +96,13 @@ end
 Posterior mean weights of each metal:
 
 ```{julia}
+#| label: data-and-model-6
 show(DataFrame(Metals = metals,
                w     = posterior_mean(chain, :w),
                w_adv = posterior_mean(chain_adv, :w)))
 ```
+
+## References
+
+::: {#refs}
+:::

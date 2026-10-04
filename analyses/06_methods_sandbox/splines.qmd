@@ -1,18 +1,21 @@
 ---
 title: "Splines + linear algebra for data analysis"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
 date: last-modified
-number-sections: true
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Source: `EnvBRAN/splines.ipynb` (the `.md` export and figures were dropped).
+## Introduction
 
-# Introduction
-
-Spline fitting is a mathematical technique used to approximate a curve or function using a collection of polynomial segments known as splines. The goal is to find a smooth and flexible curve that passes close to a given set of data points.
+Spline fitting [@deboor1978splines] is a mathematical technique used to approximate a curve or function using a collection of polynomial segments known as splines. The goal is to find a smooth and flexible curve that passes close to a given set of data points.
 
 Here's a step-by-step description of spline fitting:
 
@@ -32,14 +35,20 @@ Here's a step-by-step description of spline fitting:
 
 Spline fitting provides a flexible and accurate way to approximate curves based on a given set of data points. The resulting spline curve can capture both local and global features of the data, while maintaining smoothness and continuity.
 
-# Basis spline
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; B-splines come from `BasicBSpline` and the fit uses `Optim`.
 
 ```{julia}
+#| label: setup
 using DataFrames, Statistics, LinearAlgebra, Plots
 using BasicBSpline, Optim, Distributions
 ```
 
+## Basis spline
+
 ```{julia}
+#| label: basis-spline
 # k = KnotVector([-5.0, -5.0, -5.0, -5.0, -4.0, -3.0, -2.0, -1.0,
 #                  0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0, 5.0])
 k = KnotVector([-5.0, -5.0, -5.0, -5.0, 0.0, 5.0, 5.0, 5.0, 5.0])
@@ -55,9 +64,10 @@ P4 = BSplineSpace{4}(k) # 4th degree piecewise polynomial space
 plot(P3, xlims = (-5, 5))
 ```
 
-# Example
+## Example
 
 ```{julia}
+#| label: example
 bs = bsplinebasis.(P3, 1:5, (-5:0.1:5)');
 x = collect(-5:0.1:5)
 y_true = cos.(x) .+ 12
@@ -76,13 +86,14 @@ xlabel!("x")
 ylabel!("y")
 ```
 
-# New data
+## New data
 
 Based on the spline fitted above we want to find tha value of new $x$. The main idea is that we have to decompose the new point into the basis of functions as follow: 
 $$X \longmapsto bs(X) \longmapsto Y \\
 X_{new} \longmapsto bs(X_{new}) \longmapsto Y_{new}$$
 
 ```{julia}
+#| label: new-data
 bsp = bsplinebasis.(P3, 1:5, [0.01 2.256])
 y_new = bsp' * betas
 
@@ -90,3 +101,8 @@ plot(x, y_true, linewidth = 2, label = "true")
 plot!(x, y_fit, linewidth = 2, color = "lime", label = "fit")
 scatter!([0.01, 2.256], vec(y_new), color = "red", label = "new points")
 ```
+
+## References
+
+::: {#refs}
+:::

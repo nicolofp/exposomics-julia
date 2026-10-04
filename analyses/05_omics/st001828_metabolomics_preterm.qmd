@@ -1,21 +1,31 @@
 ---
 title: "ST001828: untargeted metabolomics and spontaneous preterm birth"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
+
+## Introduction
 
 Metabolites are small molecules that are involved in various biochemical processes within living organisms. They are the end products of metabolic pathways or intermediates involved in the conversion of one molecule to another. Metabolites play essential roles in cellular functions, including energy production, signaling, growth, and maintenance of cellular structures. Metabolomic data refers to the comprehensive analysis of metabolites present in a biological system. It involves the identification, quantification, and characterization of metabolites within a given sample or set of samples. Metabolomic studies aim to provide a snapshot of the metabolic state of an organism, tissue, or cell under specific conditions, such as disease, drug treatment, or environmental exposure. Metabolomic data sets are typically complex and high-dimensional, with multiple variables (metabolites) and samples. Analyzing and interpreting such data requires sophisticated statistical and computational approaches. By analyzing metabolomic data, researchers can identify biomarkers associated with specific conditions, uncover metabolic pathways or networks relevant to diseases, study drug metabolism, and gain insights into the biochemical mechanisms underlying physiological or pathological processes. Metabolomic data provides valuable insights into the biochemical composition and metabolic state of biological systems, contributing to our understanding of health, diseases, and the impact of various external factors on organisms.
 
-Data: Metabolomics Workbench study **ST001828** (100 samples, spontaneous
+Data: Metabolomics Workbench [@sud2016metabolomicsworkbench] study **ST001828** (100 samples, spontaneous
 preterm birth `sptb` vs term), positive-mode urine panel.
 
-Sources: `met_classification/00_data_cleaning.ipynb` (narrative, first
-steps) and `met_classification/tmp_cleaning.jl` (newer and complete
-version: imputation, tests, random forest).
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Random, LinearAlgebra, Distributions, Statistics, StatsBase
 using HypothesisTests, DecisionTree, Plots
@@ -23,10 +33,13 @@ using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Data
+
 ```{julia}
+#| label: data
 #| eval: false
 df      = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "covariates.arrow")));
-btpos   = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "bupos.arrow")));     # notebook used btpos.arrow
+btpos   = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "bupos.arrow")));
 btpos_c = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "btpos_code.arrow")));
 ```
 
@@ -34,9 +47,10 @@ btpos_c = DataFrame(Arrow.Table(joinpath(DATA, "ST001828", "btpos_code.arrow")))
 
 Select the metabolites with ≤ 25% missing data (25 of 100 samples) and
 impute the rest with the median (KNN or random-forest imputation are
-alternatives noted in the original notebook).
+possible alternatives).
 
 ```{julia}
+#| label: missing-data-and-imputation
 #| eval: false
 M_btpos, valid_met = omics_matrix(btpos, :metabolite, 2:101; max_missing = 25)
 length(valid_met)
@@ -51,6 +65,7 @@ scatter(svd_met.U[:, 1], svd_met.U[:, 2], label = "")
 Welch t-test between sPTB and term (Bonferroni):
 
 ```{julia}
+#| label: univariate-tests
 #| eval: false
 ttest_p = [pvalue(UnequalVarianceTTest(M_btpos[df.sptb .== 1, i], M_btpos[df.sptb .== 0, i]))
            for i in eachindex(valid_met)]
@@ -65,6 +80,7 @@ they come from different distributions — between groups for each
 metabolite, and between metabolites:
 
 ```{julia}
+#| label: univariate-tests-2
 #| eval: false
 ks_group = [pvalue(ApproximateTwoSampleKSTest(M_btpos[df.sptb .== 1, i], M_btpos[df.sptb .== 0, i]))
             for i in eachindex(valid_met)]
@@ -77,9 +93,10 @@ ks_pvalues[ks_group .< 0.05, ks_group .< 0.05]
 
 ## Random-forest classifier
 
-On the metabolites with KS p < 0.05.
+Random forest [@breiman2001rf] on the metabolites with KS p < 0.05.
 
 ```{julia}
+#| label: random-forest-classifier
 #| eval: false
 y = string.(df.sptb)
 sel = ks_group .< 0.05
@@ -95,3 +112,8 @@ rf_importance = DataFrame(metabolite = valid_met[sel],
                           split = split_importance(model_rf))
 sort!(rf_importance, :impurity, rev = true)
 ```
+
+## References
+
+::: {#refs}
+:::

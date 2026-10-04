@@ -1,52 +1,74 @@
 ---
 title: "Bayesian ARD linear regression"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Bayesian variable selection for the HELIX pregnancy exposome and the
+## Introduction
+
+Bayesian variable selection for the HELIX pregnancy exposome [@vrijheid2014helix] and the
 birth-weight z-score using an **Automatic Relevance Determination** (ARD)
-prior: each coefficient has its own precision `alpha_j`, so irrelevant
+prior [@tipping2001rvm]: each coefficient has its own precision `alpha_j`, so irrelevant
 exposures are shrunk towards zero.
 
-Source: `EnvBRAN/vs_bayesian.ipynb`. The model `linear_regression_ard`
-is in `src/models.jl`.
+The model `linear_regression_ard` is in `src/models.jl`.
+
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using Turing, ReverseDiff, LinearAlgebra, Statistics, DataFrames
 using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
-### Data
+## Data
 
 Maternal covariates (BMI, weight gain, age) and the 57 pregnancy exposures
 of the clean HELIX dataset.
 
 ```{julia}
+#| label: data
 df  = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 sel = vcat(["h_mbmi_None", "hs_wgtgain_None", "h_age_None"], names(df, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log)))
 Xdt = Matrix{Float64}(df[:, sel])
 Ydt = Array{Float64}(df.bw_zscore);
 ```
 
-### Automatic Relevance Determination linear Bayesian regression
+## Automatic Relevance Determination linear Bayesian regression
 
 ```{julia}
+#| label: automatic-relevance-determination-linear-bayesian
 m = linear_regression_ard(Xdt, Ydt)
 ```
 
 ```{julia}
+#| label: automatic-relevance-determination-linear-bayesian-2
 #| eval: false
 reg_ard = sample(m, NUTS(; adtype = AutoReverseDiff(; compile = true)), 1000);
 ```
 
 ```{julia}
+#| label: automatic-relevance-determination-linear-bayesian-3
 #| eval: false
 coeffs = chain_summary(reg_ard; quantiles = [0.025, 0.1, 0.5, 0.9, 0.975], pattern = "coefficients")
 coeffs.parameter = sel
 coeffs[coeffs.nonzero, :]
 ```
+
+## References
+
+::: {#refs}
+:::

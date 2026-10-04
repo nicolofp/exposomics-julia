@@ -1,24 +1,35 @@
 ---
 title: "BWQS variants on simulated mixtures"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Simulation study comparing three BWQS specifications from `src/models.jl`:
+## Introduction
+
+Simulation study comparing three Bayesian weighted quantile sum (BWQS)
+specifications [@carrico2015wqs; @colicino2020bwqs] from `src/models.jl`:
 
 * `bwqs` – flat Dirichlet prior on the weights;
-* `bwqs_adv` – hierarchical Dirichlet (`alpha ~ Gamma(2, 2)`, the former `bwqs_new`);
+* `bwqs_adv` – hierarchical Dirichlet (`alpha ~ Gamma(2, 2)`);
 * `bwqs_soft` – logit-Dirichlet prior (`DirichletLogit`).
 
 It also shows how to run multiple chains in parallel with `Distributed`.
 
-Sources: `met_classification/test_mixture.jl` (most recent version, kept as
-the main simulation), the BWQS part of `met_classification/bayesian_stuff.jl`
-and `met_classification/multichain_test.jl`.
+## Setup
+
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using LinearAlgebra, Distributions, Statistics, StatsBase, Random
 using Turing, ReverseDiff, CSV, DataFrames
@@ -30,6 +41,7 @@ DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 55 mixture components, 2 covariates, weights drawn from a flat Dirichlet.
 
 ```{julia}
+#| label: simulated-mixture
 rng = MersenneTwister(1990);
 N  = 342
 XM = rand(rng, Normal(0.0, 0.2), N, 55)
@@ -45,6 +57,7 @@ y = rand(rng, MvNormal(mmix, 0.85 * I));
 ```
 
 ```{julia}
+#| label: simulated-mixture-2
 #| eval: false
 sampler = NUTS(; adtype = AutoReverseDiff(; compile = true))
 m_soft  = bwqs_soft(XC, XM, y; alpha = fill(50.0, size(XM, 2)), phi = 10.0)  # fixed-prior version
@@ -59,6 +72,7 @@ chain_summary(chain_soft; pattern = "w[")
 Compare the estimated weights with the truth:
 
 ```{julia}
+#| label: simulated-mixture-3
 #| eval: false
 DataFrame(true_w = w,
           soft = posterior_mean(chain_soft, :w),
@@ -69,9 +83,10 @@ DataFrame(true_w = w,
 ## Small mixture with learned logit-Dirichlet prior
 
 Five components with known weights; here `bwqs_soft` learns `alpha` and
-`phi` (version from `bayesian_stuff.jl`).
+`phi`.
 
 ```{julia}
+#| label: small-mixture-with-learned-logit
 XM5 = rand(Normal(0.0, 0.2), 200, 5)
 XC5 = rand(Normal(0.0, 0.2), 200, 2)
 w5  = [0.5, 0.2, 0.2, 0.05, 0.05]
@@ -80,6 +95,7 @@ y5  = rand(MvNormal(1.1 .+ -0.23 * (XM5 * w5) .+ XC5 * [1.1, -0.12], 0.85 * I));
 ```
 
 ```{julia}
+#| label: small-mixture-with-learned-logit-2
 #| eval: false
 sampler = NUTS(; adtype = AutoReverseDiff(; compile = true))
 chain_soft5 = sample(bwqs_soft(XC5, XM5, y5), sampler, 1000)
@@ -87,13 +103,12 @@ chain_flat5 = sample(bwqs(XC5, XM5, y5), sampler, 5000)
 chain_summary(chain_flat5; pattern = "w[")
 ```
 
-The scripts also fitted the same models to a small example dataset
-(`bwqs_tmp.csv`: columns 2–6 mixture, 7–9 covariates, `y` outcome),
-originally at `https://envbran.s3.us-east-2.amazonaws.com/bwqs_tmp.csv`
-(no longer publicly reachable) or `C:/Users/nicol/Documents/bwqs_tmp.csv`;
+The models are also fitted to a small example dataset
+(`bwqs_tmp.csv`: columns 2–6 mixture, 7–9 covariates, `y` outcome);
 put a copy in `.data/bwqs_tmp.csv`.
 
 ```{julia}
+#| label: small-mixture-with-learned-logit-3
 #| eval: false
 DT = CSV.read(joinpath(DATA, "bwqs_tmp.csv"), DataFrame)
 XMd = Matrix(DT[:, 2:6]); XCd = Matrix(DT[:, 7:9]); yd = DT[:, :y]
@@ -103,6 +118,7 @@ chain_tmp = sample(bwqs(XCd, XMd, yd), NUTS(), MCMCThreads(), 5000, 4)
 ## Multiple chains on several processes
 
 ```{julia}
+#| label: multiple-chains-on-several-processes
 #| eval: false
 using Distributed
 addprocs(4; exeflags = "--project=$(Base.active_project())")
@@ -117,6 +133,11 @@ end
 chain_multi = sample(model_bwqs_multi, NUTS(), MCMCDistributed(), 50_000, 4)
 ```
 
-Open points noted in the original scripts: a Student-t BWQS to account for
+Open points: a Student-t BWQS to account for
 outliers and heavy tails, spatial models, and computational stability of the
 mixture model.
+
+## References
+
+::: {#refs}
+:::

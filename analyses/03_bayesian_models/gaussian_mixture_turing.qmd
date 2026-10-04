@@ -1,32 +1,41 @@
 ---
 title: "Gaussian mixture model with Turing"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
-Bayesian Gaussian mixture model with explicit cluster assignments, sampled
-with a Gibbs combination of particle Gibbs (for the discrete assignments)
-and HMC (for means and weights). The data have three clusters and the
+## Introduction
+
+Bayesian Gaussian mixture model [@bishop2006prml] with explicit cluster assignments, sampled
+with a Gibbs combination of particle Gibbs [@andrieu2010pmcmc] (for the discrete assignments)
+and HMC [@neal2011hmc] (for means and weights). The data have three clusters and the
 model is over-specified with `K = 4` components.
 
-Source: `EnvBRAN/test_gmm.ipynb` (titled "Infinite GMM"; the `.html`
-render and `.md` export were dropped).
+## Setup
 
-::: {.callout-note}
-The original used the Turing ≤ 0.35 syntax `Gibbs(PG(100, :k), HMC(0.05, 10, :μ, :w))`;
-current Turing pairs variables with samplers: `Gibbs(:k => PG(100), (:μ, :w) => HMC(0.05, 10))`.
-:::
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and Turing.jl [@ge2018turing].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase
 using Distributions
 using Turing
 ```
 
+## Model and sampling
+
 ```{julia}
+#| label: model-and-sampling
 w = [0.33, 0.33, 0.34]
 μ = [[5.0, 5.0], [10.0, 0.0], [0.0, 10.0]]
 mixturemodel = MixtureModel([MvNormal(μₖ, 0.1 * I) for μₖ in μ], w)
@@ -37,6 +46,7 @@ scatter(xa[1, :], xa[2, :]; label = "")
 ```
 
 ```{julia}
+#| label: model-and-sampling-2
 @model function gaussian_mixture_model4(x)
     K = 4
     # cluster means
@@ -61,6 +71,7 @@ model = gaussian_mixture_model4(xa);
 ```
 
 ```{julia}
+#| label: model-and-sampling-3
 #| eval: false
 sampler = Gibbs(:k => PG(100), (:μ, :w) => HMC(0.05, 10))
 @time chains = sample(model, sampler, 100);
@@ -70,7 +81,13 @@ sampler = Gibbs(:k => PG(100), (:μ, :w) => HMC(0.05, 10))
 Posterior median cluster assignment of each point:
 
 ```{julia}
+#| label: model-and-sampling-4
 #| eval: false
 mdn = vec(median(draws(chains, :k); dims = 1))
 countmap(mdn)
 ```
+
+## References
+
+::: {#refs}
+:::

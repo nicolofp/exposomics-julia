@@ -1,32 +1,40 @@
 ---
 title: "RxInfer for Bayesian analysis of the pregnancy exposome"
-author: "Nicolò Foppa Pedretti"
+author: "Nicol&oacute; Foppa Pedretti"
+date: last-modified
+format:
+  html:
+    fontsize: smaller
+    number-sections: true
+    embed-resources: true
+    toc: false
+bibliography: ../references.bib
+csl: ../ieee.csl
 engine: julia
-julia:
-  exeflags: ["--project=projects/exposomics-julia"]
 ---
 
+## Introduction
+
 Message-passing (variational, mean-field) Bayesian multivariate linear
-regression of the birth-weight z-score on the HELIX pregnancy exposome
-with `RxInfer.jl`, compared with OLS.
+regression of the birth-weight z-score on the HELIX pregnancy exposome [@vrijheid2014helix]
+with `RxInfer.jl` [@bagaev2023rxinfer], compared with OLS.
 
-Source: `EnvBRAN/rxinfer_exposure.md` (the `.ipynb` only survived as a
-checkpoint; the `.md` export was the most complete version).
+## Setup
 
-::: {.callout-note}
-Ported from the RxInfer 2 API of the original (`datavar`, `inference`,
-`initmarginals`) to RxInfer ≥ 3 (data as model arguments, `infer`,
-`@initialization`). The model is unchanged.
-:::
+The analysis runs in Julia [@bezanson2017julia]; `ExposomicsJulia` provides the shared helpers and models, together with DataFrames.jl [@bouchetvalat2023dataframes] and RxInfer.jl [@bagaev2023rxinfer].
 
 ```{julia}
+#| label: setup
 using ExposomicsJulia
 using RxInfer, DataFrames, Statistics, LinearAlgebra, Distributions
 using Arrow
 DATA = joinpath(pkgdir(ExposomicsJulia), ".data")
 ```
 
+## Model and inference
+
 ```{julia}
+#| label: model-and-inference
 DT = DataFrame(Arrow.Table(joinpath(DATA, "helix", "clean_dt.arrow")));
 enames   = vcat(["h_mbmi_None", "hs_wgtgain_None", "h_age_None"], names(DT, Between(:h_abs_ratio_preg_Log, :h_thm_preg_Log)))
 Exposure = Matrix{Float64}(DT[:, enames])
@@ -34,6 +42,7 @@ bw       = Vector{Float64}(DT.bw_zscore);
 ```
 
 ```{julia}
+#| label: model-and-inference-2
 n = size(Exposure, 1)
 m = size(Exposure, 2)
 
@@ -48,6 +57,7 @@ end
 ```
 
 ```{julia}
+#| label: model-and-inference-3
 #| eval: false
 results = infer(
     model          = multivariate_linear_regression(n = n, m = m),
@@ -63,6 +73,7 @@ results = infer(
 Bethe free energy convergence (truncating the initial step):
 
 ```{julia}
+#| label: model-and-inference-4
 #| eval: false
 using Plots
 plot(results.free_energy[2:end], title = "Bethe Free Energy convergence", label = nothing, size = (400, 300))
@@ -71,6 +82,7 @@ plot(results.free_energy[2:end], title = "Bethe Free Energy convergence", label 
 Posterior credible intervals of the exposure effects:
 
 ```{julia}
+#| label: model-and-inference-5
 #| eval: false
 as = rand(results.posteriors[:a], 10000)
 DT_results = DataFrame(Variable = enames,
@@ -84,6 +96,7 @@ show(DT_results[DT_results.sig, :])
 Normal approximation p-values from the posterior means/SDs:
 
 ```{julia}
+#| label: model-and-inference-6
 #| eval: false
 betas = vcat(mean(results.posteriors[:b]), mean(results.posteriors[:a]))
 stds  = vcat(std(results.posteriors[:b]), sqrt.(diag(cov(results.posteriors[:a]))))
@@ -92,11 +105,17 @@ DT_bayes = DataFrame(Names = vcat("intercept", enames), beta = betas, std = stds
 show(DT_bayes[DT_bayes.p_value .< 0.05, :])
 ```
 
-Comparison with OLS (`ols_summary`; `two_sided = false` reproduces the
-one-sided p-values of the original notebook):
+Comparison with OLS (`ols_summary`, one-sided p-values with
+`two_sided = false`):
 
 ```{julia}
+#| label: model-and-inference-7
 X_ols = hcat(ones(n), Exposure)
 DT_inf = ols_summary(X_ols, bw, vcat("intercept", enames); two_sided = false)
 show(DT_inf[DT_inf.p_value .< 0.05, :])
 ```
+
+## References
+
+::: {#refs}
+:::
