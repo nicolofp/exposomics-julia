@@ -1,0 +1,33 @@
+# Data and outputs never go into git (README stubs excepted)
+data/*
+!data/README.md
+results/*
+!results/README.md
+
+# Large/binary artefacts
+*.jld2
+*.jld
+*.arrow
+*.parquet
+*.feather
+*.h5
+*.rds
+
+# Jupyter / Quarto render artefacts
+.ipynb_checkpoints/
+*.ipynb
+*_files/
+*.html
+.quarto/
+
+# Julia
+Manifest.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
