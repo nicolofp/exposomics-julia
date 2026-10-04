@@ -1,0 +1,110 @@
+---
+title: "Probabilistic PCA with Turing"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Probabilistic PCA (`pPCA`), its Dirichlet-loading variant (`pPCA_dir`) and
+the ARD / supervised variants (`pPCA_ARD`, `spPCA`, `spPCA_ARD`), all in
+`src/models.jl`. First on a simulated block-structured expression matrix,
+then on untargeted metabolomics (ST001828, negative-mode urine panel),
+with NUTS and ADVI.
+
+Sources: `EnvBRAN/ppca_turing.ipynb` (simulation), `met_classification/rca.jl`
+(metabolomics, ADVI, Dirichlet loadings), ARD/supervised models from
+`EnvBRAN/bayes_lib.jl`. The `pPCA_ARD` defined inside `ppca_turing.ipynb`
+(which had a degenerate `Normal(1.0, 0.0)` prior) was dropped in favour of
+the `bayes_lib.jl` version.
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase, Distributions
+using Turing, ReverseDiff
+```
+
+## Simulated expression matrix
+
+A diagonal-block expression matrix with some non-informative genes (not all
+features differ between cells).
+
+```{julia}
+n_genes = 90   # D
+n_cells = 600  # N
+mat_exp = randn(n_genes, n_cells)
+mat_exp[1:(n_genes ÷ 3), 1:(n_cells ÷ 2)] .+= 10
+mat_exp[(2 * (n_genes ÷ 3) + 1):end, (n_cells ÷ 2 + 1):end] .+= 10;
+```
+
+`k` is the dimension of the projected space, i.e. the number of principal
+components of choice.
+
+```{julia}
+#| eval: false
+k = 2
+ppca = pPCA(permutedims(mat_exp), k)
+chain_ppca = sample(ppca, NUTS(; adtype = AutoReverseDiff(; compile = true)), 1000);
+Z = posterior_mean(chain_ppca, :Z)              # k × N latent scores
+scatter(Z[1, :], Z[2, :]; group = repeat([1, 2]; inner = n_cells ÷ 2), xlabel = "z1", ylabel = "z2")
+```
+
+## Untargeted metabolomics (ST001828)
+
+Metabolites with ≤ 25 missing samples (out of 100), median-imputed and
+standardised (`omics_matrix`); first 10 metabolites to keep sampling fast.
+
+```{julia}
+#| eval: false
+df    = read_arrow(datadir("ST001828", "covariates.arrow"));
+buneg = read_arrow(datadir("ST001828", "buneg.arrow"));
+M_all, met_ids = omics_matrix(buneg, :metabolite, 2:101; max_missing = 25)
+M_buneg = rescale(M_all[:, 1:10])
+N, D = size(M_buneg)
+```
+
+pPCA with ADVI and NUTS:
+
+```{julia}
+#| eval: false
+ppca = pPCA(M_buneg, 2)
+res_vi = vi(ppca, q_meanfield_gaussian, 1000; show_progress = false);
+chain_ppca = sample(ppca, NUTS(), 1000);
+
+Z  = posterior_mean(chain_ppca, :Z)
+df_pca = DataFrame(z1 = Z[1, :], z2 = Z[2, :])
+scatter(df_pca.z1, df_pca.z2; xlabel = "z1", ylabel = "z2", label = "NUTS")
+
+# ADVI posterior mean of Z
+Zvi = mean(rand(res_vi)[@varname(Z)] for _ in 1:1000)
+scatter!(Zvi[1, :], Zvi[2, :]; label = "ADVI")     # sign of the axes is arbitrary
+```
+
+pPCA with Dirichlet (simplex) loadings and one component:
+
+```{julia}
+#| eval: false
+ppca_dir = pPCA_dir(M_buneg, 1)
+chain_dir = sample(ppca_dir, NUTS(), 1000)
+W = posterior_mean(chain_dir, :W)          # D × 1
+Z = posterior_mean(chain_dir, :Z)          # 1 × N
+μ = posterior_mean(chain_dir, :μ)
+sum(W)                                  # loadings on the simplex
+mat_rec = W * Z .+ repeat(μ; inner = (1, N))   # reconstruction (D × N)
+```
+
+## ARD and supervised pPCA
+
+`pPCA_ARD(x, k)` lets the ARD prior switch off unnecessary components;
+`spPCA`/`spPCA_ARD(x, y, k)` model the exposures `x` and an outcome `y`
+with shared latent factors.
+
+```{julia}
+#| eval: false
+DT = load_helix_clean();
+x  = rescale(Matrix{Float64}(DT[:, helix_exposure_names(DT)]))
+y  = Vector{Float64}(DT.bw_zscore)
+chain_ard  = sample(pPCA_ARD(x, 5), NUTS(), 500)
+chain_sard = sample(spPCA_ARD(x, y, 5), NUTS(), 500)
+chain_summary(chain_ard; pattern = "alpha")
+```

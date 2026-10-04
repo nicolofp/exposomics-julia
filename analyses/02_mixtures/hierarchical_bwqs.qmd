@@ -1,0 +1,65 @@
+---
+title: "Hierarchical BWQS (random intercepts and mixture slopes)"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Hierarchical extension of BWQS where each group (e.g. cohort) has its own
+intercept and its own mixture effect, with partial pooling. The model
+`hbwqs` is in `src/models.jl`.
+
+Source: `met_classification/bwqshd.jl` (the vectorised `hbwqs2` was the
+version actually sampled; the per-observation loop version `hbwqs` with a
+single slope SD was dropped as superseded).
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, CSV, HTTP, Statistics
+using Turing, ReverseDiff
+```
+
+## Toy multilevel example
+
+Example dataset from <https://storopoli.io/Bayesian-Julia/pages/11_multilevel_models/>:
+
+* `cheese`: type of cheese from A to D
+* `rater`: id of the rater from 1 to 10
+* `background`: type of rater, either rural or urban
+* `y`: rating of the cheese
+
+```{julia}
+url = "https://raw.githubusercontent.com/storopoli/Bayesian-Julia/master/datasets/cheese.csv"
+cheese = CSV.read(HTTP.get(url).body, DataFrame)
+
+for c in unique(cheese[:, :cheese])
+    cheese[:, "cheese_$c"] = ifelse.(cheese[:, :cheese] .== c, 1, 0)
+end
+cheese[:, :background_int] = map(b -> b == "rural" ? 1 : b == "urban" ? 2 : missing, cheese[:, :background])
+first(cheese, 5)
+```
+
+```{julia}
+X   = Matrix(select(cheese, Between(:cheese_A, :cheese_D)));
+y   = cheese[:, :y];
+idx = cheese[:, :background_int];
+```
+
+## Exposure mixture by cohort
+
+`bwqs_tmp.csv` (see `data/README.md`): quantised urinary metals
+`UAs_q … UPb_q`, covariates in columns 8–12 and 15–17, cohort index.
+
+```{julia}
+#| eval: false
+DT  = CSV.read(datadir("bwqs_tmp.csv"), DataFrame)
+M   = Matrix(select(DT, Between(:UAs_q, :UPb_q)));
+X   = Matrix(DT[:, vcat(8:12, 15:17)]);
+y   = DT[:, :y];
+idx = DT[:, :cohort];
+
+model_h = hbwqs(M, X, idx, y)
+chain_h = sample(model_h, NUTS(; adtype = AutoReverseDiff(; compile = true)), 1000)
+chain_summary(chain_h; pattern = "w[")
+```

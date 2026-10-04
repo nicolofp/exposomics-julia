@@ -1,0 +1,62 @@
+---
+title: "MMIP: methylation and exposure tables"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+execute:
+  eval: false   # input data not in the repo (see data/README.md)
+---
+
+Exploration/reshaping of the MMIP study tables (epidemiological data,
+chemical exposures, DNA-methylation betas, sample mapping and codebook).
+The data are private and are expected in `data/MMIP/` (originally
+`G:/My Drive/Dati/MMIP/`).
+
+Source: `met_classification/df_casting.jl`.
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Plots
+```
+
+```{julia}
+df        = read_arrow(datadir("MMIP", "epi.arrow"));
+exposure  = read_arrow(datadir("MMIP", "exposure.arrow"));
+betas     = read_arrow(datadir("MMIP", "betas.arrow"));
+mapping   = read_arrow(datadir("MMIP", "mapping.arrow"));
+codebook  = read_arrow(datadir("MMIP", "codebook.arrow"));
+```
+
+Short mapping: keep only the oxidative-bisulfite (`OX`) first replicate (all at birth).
+
+```{julia}
+mapping = mapping[:, [:Sample_Name, :Methylation_Treatment, :Replicate, :CHILD_PID]]
+tmp_mapping = filter([:Methylation_Treatment, :Replicate] => (x, y) -> x == "OX" && y == "rep1", mapping)
+
+betas[:, vcat("rn", tmp_mapping.Sample_Name)]
+histogram(Array(betas[1, tmp_mapping.Sample_Name]),
+          title = betas[1, "rn"], label = "", bins = 10)
+```
+
+Exposure table and chemical groups:
+
+```{julia}
+exposure[:, [:CHILD_PID, :Chemical_Group, :Analyte_Code, :Units, :LOD, :Concentration, :Comment_code]]
+unique(exposure.Chemical_Group)
+```
+
+Restrict to the children with methylation data and cast to wide format
+(one column per analyte).
+
+```{julia}
+exp_red = filter([:CHILD_PID] => x -> x ∈ tmp_mapping.CHILD_PID, exposure)
+dropmissing!(exp_red)
+exp_wide = dropmissing(unstack(exp_red, :CHILD_PID, :Analyte_Code, :Concentration))
+```
+
+Negative concentrations (below LOD codes):
+
+```{julia}
+exposure[exposure.Concentration .< 0, :]
+```

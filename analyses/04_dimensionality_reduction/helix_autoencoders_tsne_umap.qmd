@@ -1,0 +1,116 @@
+---
+title: "Encoder-based dimensionality reduction of the pregnancy exposome"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Non-linear 2-D embeddings of the 57 HELIX pregnancy exposures: a deep
+autoencoder, t-SNE, UMAP and a variational autoencoder, coloured by cohort.
+
+Source: `EnvBRAN/dim_red_aut.ipynb` (the `.md` export and its SVG figures
+were dropped).
+
+Ported from the implicit-parameter Flux API (`Flux.params`, `train!(loss, ps, data, opt)`)
+to the explicit API of Flux ≥ 0.15 (`Flux.setup`, `train!(loss, model, data, state)`).
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, LinearAlgebra, Plots
+using Flux, UMAP, TSne
+```
+
+```{julia}
+DT = load_helix_clean();
+M_exp = Matrix{Float32}(rescale(Matrix{Float32}(DT[:, helix_exposure_names(DT)]); dims = 1));
+X_all = permutedims(M_exp)                       # features × samples (Flux convention)
+dl = Flux.DataLoader(X_all, batchsize = 100, shuffle = true)
+cohort = string.(DT.h_cohort);
+```
+
+## Autoencoder
+
+```{julia}
+r = size(M_exp, 2)
+model = Chain(Dense(r, 150, leakyrelu), Dense(150, 70, leakyrelu),
+              Dense(70, 20, leakyrelu), Dense(20, 2, leakyrelu),     # encoder
+              Dense(2, 20, leakyrelu), Dense(20, 70, leakyrelu),
+              Dense(70, 150, leakyrelu), Dense(150, r))              # decoder
+
+ae_loss(m, x) = Flux.Losses.mse(m(x), x)
+ae_loss(model, X_all)
+```
+
+```{julia}
+#| eval: false
+opt_state = Flux.setup(Adam(), model)
+for epoch in 1:1000
+    Flux.train!(ae_loss, model, dl, opt_state)
+end
+ae_loss(model, X_all)
+```
+
+```{julia}
+#| eval: false
+model_encoder = model[1:4]
+dt_red = model_encoder(X_all);
+scatter_embedding(dt_red; groups = cohort, title = "Cluster Encoder")
+```
+
+## t-SNE and UMAP
+
+```{julia}
+#| eval: false
+y_tsne = tsne(M_exp, 2, 57, 1000, 30, pca_init = true, progress = false);
+scatter_embedding(y_tsne; groups = cohort, title = "Clusters T-Sne")
+```
+
+```{julia}
+#| eval: false
+umap_model = UMAP.fit(X_all, 2).embedding
+scatter_embedding(umap_model; groups = cohort, title = "Clusters UMAP")
+```
+
+# Variational autoencoder
+
+```{julia}
+vae = (encoder = Chain(Dense(r, 20, leakyrelu), Parallel(tuple, Dense(20, 2), Dense(20, 2))),
+       decoder = Chain(Dense(2, 20, leakyrelu), Dense(20, r)))
+
+function reconstuct(m, x)
+    μ, logσ = m.encoder(x)               # posterior parameters
+    ϵ = randn(Float32, size(logσ))       # sample from N(0, I)
+    z = μ + ϵ .* exp.(logσ)              # reparametrisation
+    μ, logσ, m.decoder(z)
+end
+
+function vae_loss(m, x; λ = 0.005f0)
+    len = size(x)[end]
+    μ, logσ, decoder_z = reconstuct(m, x)
+    # D_KL(q(z|x) || p(z|x))
+    kl_q_p = 0.5f0 * sum(@. (exp(2f0 * logσ) + μ^2 - 1f0 - 2f0 * logσ)) / len
+    # E[log p(x|z)]
+    logp_x_z = -Flux.Losses.logitbinarycrossentropy(decoder_z, x, agg = sum) / len
+    # L2 regularisation of the decoder weights
+    reg = λ * sum(p -> sum(abs2, p), Flux.trainables(m.decoder))
+    -logp_x_z + kl_q_p + reg
+end
+
+vae_loss(vae, X_all)
+```
+
+```{julia}
+#| eval: false
+opt_state = Flux.setup(Adam(0.001), vae)
+for epoch in 1:50
+    Flux.train!(vae_loss, vae, dl, opt_state)
+end
+vae_loss(vae, X_all)
+```
+
+```{julia}
+#| eval: false
+data_reduced = vae.encoder(X_all)    # (μ, logσ)
+scatter_embedding(data_reduced[1]; groups = cohort, title = "Cluster Variational Encoder")
+```

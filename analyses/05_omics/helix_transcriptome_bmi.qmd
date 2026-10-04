@@ -1,0 +1,74 @@
+---
+title: "HELIX transcriptome: gene expression and child BMI"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Descriptive summary, SVD/t-SNE and a transcriptome-wide association scan of
+child BMI z-score (WHO) on each transcript cluster, adjusted for ancestry
+PCs and blood cell-type proportions.
+
+Source: `EnvBRAN/genexpr.jl`.
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Plots, LinearAlgebra, Statistics, Distributions, CSV, Parquet, TSne
+```
+
+```{julia}
+#| eval: false
+phenotype   = DataFrame(read_parquet(datadir("helix", "phenotype.parquet")));
+genexpr     = CSV.read(datadir("helix", "genexpr_num.csv"), DataFrame);       # genes × samples, first column `rn`
+genexpr_cov = DataFrame(read_parquet(datadir("helix", "genexpr_cov.parquet")));
+```
+
+Per-gene summary statistics:
+
+```{julia}
+#| eval: false
+G = Matrix{Float64}(genexpr[:, 2:end])
+MV = DataFrame(gene = string.(genexpr.rn), mean = vec(mean(G; dims = 2)), sd = vec(std(G; dims = 2)),
+               q25 = [quantile(r, 0.25) for r in eachrow(G)],
+               q50 = [quantile(r, 0.50) for r in eachrow(G)],
+               q75 = [quantile(r, 0.75) for r in eachrow(G)])
+```
+
+SVD and t-SNE of the samples:
+
+```{julia}
+#| eval: false
+X = permutedims(G)                       # samples × genes
+svd_gene = svd(X);
+var_expl = svd_gene.S .^ 2 / sum(svd_gene.S .^ 2)
+PCA_gene = svd_gene.U * Diagonal(svd_gene.S)
+y_tsne = tsne(X, 2, 50, 1000, 15, pca_init = true, progress = false);
+```
+
+Transcriptome-wide association with BMI z-score (`exposure_scan`; the
+original script used a hand-written OLS loop):
+
+```{julia}
+#| eval: false
+genexpr_t = permutedims(genexpr, 1);
+rename!(genexpr_t, :rn => :ID);
+phenotype.ID = string.(phenotype.ID);
+DT = innerjoin(genexpr_cov, phenotype[:, [:ID, :hs_zbmi_who]], on = :ID);
+DT = innerjoin(DT, genexpr_t, on = :ID);
+DT = DT[completecases(DT), :];
+
+gene_names = string.(genexpr.rn)
+covars = [:ethn_PC1, :ethn_PC2, :NK_6, :Bcell_6, :CD4T_6, :CD8T_6, :Gran_6, :Mono_6]
+@time ewas_results = exposure_scan(Float64.(DT.hs_zbmi_who), Matrix{Float64}(DT[:, gene_names]),
+                                   Matrix{Float64}(DT[:, covars]); names = gene_names)
+```
+
+Volcano-style plot:
+
+```{julia}
+#| eval: false
+ewas2 = ewas_results[abs.(ewas_results.beta) .< 10.0, :]
+scatter(ewas2.beta, -log10.(ewas2.p_value), color = ifelse.(ewas2.bonferroni, "aqua", "coral2"),
+        size = (400, 300), label = "")
+```

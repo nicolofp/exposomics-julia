@@ -1,0 +1,114 @@
+---
+title: "Linear and integer programming with JuMP"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Small optimisation examples with `JuMP` and the `HiGHS` solver: an integer
+program, a shortest path, and two minimum-cost network-flow problems (one
+from a matrix, one read from CSV files).
+
+Sources: `met_classification/optimization_test.jl` and
+`met_classification/network_minimal_flow.jl` (switched from GLPK to HiGHS so
+only one LP solver is needed; the two tiny CSV inputs are in
+`network_data/`).
+
+```{julia}
+using ExposomicsJulia
+using JuMP, HiGHS, DelimitedFiles
+```
+
+## Integer program
+
+```{julia}
+model = Model(HiGHS.Optimizer)
+set_silent(model)
+@variable(model, x >= 0, Int)
+@variable(model, 0 <= y <= 30, Int)
+@objective(model, Min, 12x + 20y)
+@constraint(model, c1, 6x + 8y >= 100)
+@constraint(model, c2, 7x + 12y >= 120)
+print(model)
+optimize!(model)
+value(x), value(y)
+```
+
+## Shortest path from A to E
+
+```{julia}
+G = [0 10 30 0  0
+     0  0 20 0  0
+     0  0  0 10 60
+     0 15  0 0  50
+     0  0  0 0  0]
+n = size(G, 1)
+b = [1, 0, 0, 0, -1]
+shortest_path = Model(HiGHS.Optimizer)
+set_silent(shortest_path)
+@variable(shortest_path, x[1:n, 1:n], Bin)
+# arcs with zero cost do not exist
+@constraint(shortest_path, [i = 1:n, j = 1:n; G[i, j] == 0], x[i, j] == 0)
+# flow conservation
+@constraint(shortest_path, [i = 1:n], sum(x[i, :]) - sum(x[:, i]) == b[i])
+@objective(shortest_path, Min, sum(G .* x))
+optimize!(shortest_path)
+objective_value(shortest_path), value.(x)
+```
+
+## Minimum-cost flow (incidence matrix)
+
+```{julia}
+c = [2, 4, 9, 11, 4, 3, 8, 7, 0, 15, 38, 18]
+b = [0, -19, 16, -33, 0, 0, 117]
+G = [-1 -1  1  0  1  0  0  0  0  1  0  0;
+      1  0  0  1  0  1  0  0  0  0  0  0;
+      0  0 -1 -1  0  0  0  0  0  0  0  0;
+      0  1  0  0  0  0  1  1  0  0  1  0;
+      0  0  0  0 -1 -1 -1  0  1  0  0  0;
+      0  0  0  0  0  0  0 -1 -1  0  0  1;
+      0  0  0  0  0  0  0  0  0 -1 -1 -1]
+lb = zeros(12)
+ub = [10, 10, 10, 30, 100, 30, 30, 15, 15, 20, 20, 20]
+m = size(G, 2)
+
+network_balance = Model(HiGHS.Optimizer)
+set_silent(network_balance)
+@variable(network_balance, lb[i] <= x[i = 1:m] <= ub[i])
+@constraint(network_balance, G * x .>= -b)     # flow conservation
+@objective(network_balance, Min, sum(c .* x))
+optimize!(network_balance)
+objective_value(network_balance), value.(x)
+```
+
+## Minimum-cost flow (network read from CSV)
+
+```{julia}
+netdir = projectdir("analyses", "06_methods_sandbox", "network_data")
+data, header = readdlm(joinpath(netdir, "simple_net.csv"), ',', header = true)
+start_node = round.(Int64, data[:, 1])
+end_node   = round.(Int64, data[:, 2])
+c = data[:, 3]
+u = data[:, 4]
+data2, _ = readdlm(joinpath(netdir, "simple_network_b.csv"), ',', header = true)
+b = data2[:, 2]
+
+no_node = max(maximum(start_node), maximum(end_node))
+nodes = 1:no_node
+links = Tuple((start_node[i], end_node[i]) for i in eachindex(start_node))
+c_dict = Dict(links .=> c)
+u_dict = Dict(links .=> u)
+
+mcnf = Model(HiGHS.Optimizer)
+set_silent(mcnf)
+@variable(mcnf, 0 <= x[link in links] <= u_dict[link])
+@objective(mcnf, Min, sum(c_dict[link] * x[link] for link in links))
+for i in nodes
+    @constraint(mcnf, sum(x[(ii, j)] for (ii, j) in links if ii == i) -
+                      sum(x[(j, ii)] for (j, ii) in links if ii == i) == b[i])
+end
+optimize!(mcnf)
+println("The optimal objective function value is = ", objective_value(mcnf))
+value.(x).data
+```

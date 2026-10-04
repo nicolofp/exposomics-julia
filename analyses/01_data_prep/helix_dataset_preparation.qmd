@@ -1,0 +1,112 @@
+---
+title: "HELIX: building the pregnancy exposome dataset"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+execute:
+  eval: false   # input data not in the repo (see data/README.md)
+---
+
+Import data from the **HELIX project** (Exposome Data Challenge tables) and
+prepare the dataset used to analyse the mixture of chemicals in the
+downstream analyses (`02_mixtures`, `03_bayesian_models`,
+`04_dimensionality_reduction`, `05_omics`).
+
+Source: `EnvBRAN/dataset_preparation.ipynb`.
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, CategoricalArrays, StatsBase
+using Parquet, JLD2, Arrow
+```
+
+Load the data from the `.parquet` tables (expected in `data/helix/`, see
+`data/README.md`).
+
+```{julia}
+covariates = DataFrame(read_parquet(datadir("helix", "covariates.parquet")));
+phenotype  = DataFrame(read_parquet(datadir("helix", "phenotype.parquet")));
+codebook   = DataFrame(read_parquet(datadir("helix", "codebook.parquet")));
+```
+
+Codebook with all the exposures considered (metals shown as an example):
+
+```{julia}
+filter([:family] => (x) -> x == "Metals", codebook)
+```
+
+```{julia}
+exposure = filter([:period, :var_type, :domain, :family] => (x, y, z, w) ->
+                      x == "Pregnancy" && y == "numeric" &&
+                      z != "Covariates" && z != "Phenotype" &&
+                      w ∉ ["Built environment", "Natural Spaces", "Noise", "Traffic", "Tobacco Smoke"],
+                  codebook);
+
+show(exposure[:, [:variable_name, :domain, :family, :subfamily, :period, :var_type, :labelsshort]],
+     allcols = true)
+```
+
+Let's consider all the phenotypes and covariates for the analysis.
+
+```{julia}
+cov_pheno = filter([:domain, :period] => (z, w) -> w == "Pregnancy" &&
+                       (z == "Covariates" || z == "Phenotype"), codebook)
+show(cov_pheno[:, [:variable_name, :domain, :family, :subfamily, :period, :var_type, :labelsshort]],
+     allcols = true)
+```
+
+Create a unique dataset which contains all the covariates and phenotypes.
+We then use this information to compute the **birth weight z-score**
+according to *sex*, *gestational age* and *cohort* (which are not
+homogeneous). We use only complete observations for non-premature births.
+
+```{julia}
+dt_covar = covariates[:, push!(cov_pheno.variable_name[1:10], "ID")];
+dt_pheno = phenotype[:, ["ID", "e3_bw"]]
+dt_pheno.ID = string.(dt_pheno.ID);
+
+DT = innerjoin(dt_covar, dt_pheno, on = :ID => :ID)
+DT = dropmissing(DT)
+DT = DT[DT.e3_gac_None .>= 37.0, :]
+show(DT[:, ["ID", "h_cohort", "e3_bw", "h_mbmi_None", "hs_wgtgain_None",
+            "e3_gac_None", "e3_sex_None", "h_age_None"]], allcols = true)
+```
+
+Select the categories for the gestational age:
+
+```{julia}
+countmap(cut(DT.e3_gac_None, [37, 39, 40, 41, 45]))
+DT.e3_gac_Cat = cut(DT.e3_gac_None, [37, 39, 40, 41, 45]);
+```
+
+Birth-weight z-score within cohort × gestational-age class × sex
+(`add_zscore` from `src/data.jl`):
+
+```{julia}
+DT = add_zscore(DT, :e3_bw, [:h_cohort, :e3_gac_Cat, :e3_sex_None]; name = :bw_zscore);
+```
+
+Join the dataset with the phenotype and covariates with the dataset of exposures:
+
+```{julia}
+DT = innerjoin(DT, covariates[:, push!(exposure.variable_name, "ID")], on = :ID)
+DT = dropmissing(DT);
+```
+
+Here a preview of the final dataset with some variables:
+
+```{julia}
+show(DT[:, ["ID", "h_cohort", "e3_sex_None", "bw_zscore", "h_pm10_ratio_preg_None", "hs_hg_m_Log2"]],
+     allcols = true)
+```
+
+Save the result in `data/helix/`: the Arrow copy (`clean_dt.arrow`, without
+the categorical `e3_gac_Cat` column, read by default by `load_helix_clean()`)
+and the JLD2 file of the original notebook (`clead_dt.jld2`).
+
+```{julia}
+#| eval: false
+Arrow.write(datadir("helix", "clean_dt.arrow"), select(DT, Not(:e3_gac_Cat)))
+save_object(datadir("helix", "clead_dt.jld2"), DT)
+```

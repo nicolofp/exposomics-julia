@@ -1,0 +1,65 @@
+---
+title: "GSE59491: maternal blood gene expression, preterm birth and gestational age"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Maternal blood gene expression (GEO **GSE59491**) at the first sampling
+time point: SVD, Welch t-tests between birth outcomes and a gene-wise
+association scan with gestational age at delivery.
+
+Source: `met_classification/GA_genexpr.jl` (its regression loop wrote into
+an undefined `RExp`; replaced by `exposure_scan`).
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Random, LinearAlgebra, Distributions, Statistics, StatsBase
+using HypothesisTests, Plots
+```
+
+```{julia}
+#| eval: false
+df      = read_arrow(datadir("GSE59491", "GSE59491_cov.arrow"));
+genexpr = read_arrow(datadir("GSE59491", "GSE59491_genexpr.arrow"));
+
+# no missing data
+sum(sum(ismissing.(genexpr[:, i])) for i in 1:size(genexpr, 2)),
+sum(sum(ismissing.(df[:, i])) for i in 1:size(df, 2))
+
+df1 = df[df.sp_time .== 1, :]                  # first time point
+X_genexpr = rescale(permutedims(Matrix{Float64}(genexpr[:, string.(df1.geo_id)])))
+gene_ids = string.(genexpr.ID_REF)
+```
+
+SVD (no evident cluster):
+
+```{julia}
+#| eval: false
+svd_genexpr = svd(X_genexpr)
+scatter(svd_genexpr.U[:, 1], svd_genexpr.U[:, 2], label = "")
+svd_genexpr.S .^ 2 / sum(svd_genexpr.S .^ 2)
+```
+
+Mean difference between birth outcomes (Welch t-test, Bonferroni):
+
+```{julia}
+#| eval: false
+pvals = zeros(size(X_genexpr, 2))
+Threads.@threads for i in 1:size(X_genexpr, 2)
+    pvals[i] = pvalue(UnequalVarianceTTest(X_genexpr[df1.birth_out_1 .== 1, i],
+                                           X_genexpr[df1.birth_out_1 .== 0, i]))
+end
+T_genexpr = DataFrame(gene = gene_ids, p_value = pvals, bonferroni = pvals .<= 0.05 / length(pvals))
+T_genexpr[T_genexpr.bonferroni, :]
+```
+
+Gene-wise regression of gestational age:
+
+```{julia}
+#| eval: false
+ewas_results = exposure_scan(Float64.(df1.gestage), X_genexpr; names = gene_ids)
+scatter(df1.gestage, X_genexpr[:, gene_ids .== "30850_at"], label = "30850_at")
+histogram(X_genexpr[:, 1])
+```

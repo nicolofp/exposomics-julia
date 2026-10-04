@@ -1,0 +1,88 @@
+---
+title: "High-dimensional exposome × transcriptome scan (interactions)"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Exposome-wide scan of gene expression on the 57 pregnancy exposures, their
+squares and pairwise (and, in the exploratory version, three-way)
+products, adjusted for the gene-expression covariates.
+
+Sources: `EnvBRAN/high_exposure.ipynb` (one transcript, includes three-way
+terms) and `EnvBRAN/script_high_exposure.jl` (batch run over all
+transcripts with squares + unique pairwise products; it wrote ~32k
+`gexpr_results*/<gene>.txt` files, which are **not** in git – the batch
+writes to `results/gexpr_results/`).
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, LinearAlgebra, Distributions, CSV, Parquet, Combinatorics
+```
+
+```{julia}
+#| eval: false
+DT = load_helix_clean();
+genexpr     = CSV.read(datadir("helix", "genexpr_num.csv"), DataFrame);
+genexpr_cov = DataFrame(read_parquet(datadir("helix", "genexpr_cov.parquet")));
+genexpr_t = permutedims(genexpr, 1);
+rename!(genexpr_t, :rn => :ID);
+
+DT = innerjoin(genexpr_cov, DT, on = :ID);
+DT = innerjoin(DT, genexpr_t, on = :ID);
+DT = DT[completecases(DT), :];
+
+exposure_label = helix_exposure_names(DT);
+M_exp = rescale(Matrix{Float64}(DT[:, exposure_label]));
+# adjustment covariates: columns 3, 5–12 of the joined table (from genexpr_cov),
+# as in the original code
+covars = Matrix{Float64}(DT[:, names(DT)[[3, 5, 6, 7, 8, 9, 10, 11, 12]]]);
+```
+
+## Design: main effects, squares and pairwise products
+
+```{julia}
+#| eval: false
+pairs  = collect(combinations(1:length(exposure_label), 2))
+E2     = reduce(hcat, [M_exp[:, i] .* M_exp[:, j] for (i, j) in pairs])
+Esq    = M_exp .^ 2
+EM     = hcat(M_exp, Esq, E2)
+labels = vcat(exposure_label,
+              exposure_label .* " × " .* exposure_label,
+              [exposure_label[i] * " × " * exposure_label[j] for (i, j) in pairs]);
+```
+
+Optional three-way products (all ordered triples, 57³ ≈ 185k terms, as in
+the exploratory notebook — memory hungry):
+
+```{julia}
+#| eval: false
+triples = vec([(i, j, k) for i in 1:57, j in 1:57, k in 1:57])
+E3 = reduce(hcat, [M_exp[:, i] .* M_exp[:, j] .* M_exp[:, k] for (i, j, k) in triples])
+```
+
+## One transcript
+
+```{julia}
+#| eval: false
+ewas_results = exposure_scan(Float64.(DT[:, "TC01000001.hg.1"]), EM, covars; names = labels)
+show(ewas_results[ewas_results.bonferroni, :])
+```
+
+## All transcripts (batch)
+
+Writes the Bonferroni-significant terms of each transcript to
+`results/gexpr_results/<gene>.txt`. Run as a script with
+`julia --threads=auto --project=.`.
+
+```{julia}
+#| eval: false
+outdir = resultsdir("gexpr_results"); mkpath(outdir)
+for (j, gene) in enumerate(string.(genexpr.rn))
+    println("Analyze #", j, ": ", gene)
+    res = exposure_scan(Float64.(DT[:, gene]), EM, covars; names = labels)
+    sig = res[res.bonferroni, :]
+    nrow(sig) > 0 && CSV.write(joinpath(outdir, gene * ".txt"), sig; delim = '\t')
+end
+```

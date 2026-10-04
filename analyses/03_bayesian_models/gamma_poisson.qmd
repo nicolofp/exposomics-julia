@@ -1,0 +1,47 @@
+---
+title: "Gamma–Poisson model for counts"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Hierarchical Gamma–Poisson model: each sample (row) has its own background
+rate `br[n] ~ Gamma(a0, b0)` and its counts are Poisson with that rate.
+The model `gamma_poisson` is in `src/models.jl` (it was duplicated in
+`gp.jl` and `nb_regression.jl`; the miRNA application is in
+`05_omics/gse154829_mirna_asthma.qmd`).
+
+Source: `met_classification/gp.jl` (simulation).
+
+```{julia}
+using ExposomicsJulia
+using Distributions, Statistics, StatsBase, Random, DataFrames
+using Turing, Plots
+```
+
+Simulated data: 100 samples × 40 counts, background rates from `Gamma(5, 2)`.
+
+```{julia}
+Random.seed!(1234)
+back_distr = rand(Gamma(5.0, 2.0), 100)
+X = zeros(100, 40)
+for i in 1:100
+    X[i, :] = rand(Poisson(back_distr[i]), 40)
+end
+```
+
+```{julia}
+#| eval: false
+m = gamma_poisson(X)
+chain_gp = sample(m, NUTS(), MCMCThreads(), 1000, 3)
+tmp = chain_summary(chain_gp)
+```
+
+Compare the estimated background rates with the simulated ones:
+
+```{julia}
+#| eval: false
+scatter(back_distr, posterior_mean(chain_gp, :br);
+        xlabel = "true rate", ylabel = "posterior mean", label = "")
+```

@@ -1,0 +1,50 @@
+---
+title: "Bayesian ARD linear regression"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Bayesian variable selection for the HELIX pregnancy exposome and the
+birth-weight z-score using an **Automatic Relevance Determination** (ARD)
+prior: each coefficient has its own precision `alpha_j`, so irrelevant
+exposures are shrunk towards zero.
+
+Source: `EnvBRAN/vs_bayesian.ipynb`. The model `linear_regression_ard`
+is in `src/models.jl`.
+
+```{julia}
+using ExposomicsJulia
+using Turing, ReverseDiff, LinearAlgebra, Statistics, DataFrames
+```
+
+### Data
+
+Maternal covariates (BMI, weight gain, age) and the 57 pregnancy exposures
+of the clean HELIX dataset.
+
+```{julia}
+df  = load_helix_clean();
+sel = vcat(HELIX_COVARIATES, helix_exposure_names(df))
+Xdt = Matrix{Float64}(df[:, sel])
+Ydt = Array{Float64}(df.bw_zscore);
+```
+
+### Automatic Relevance Determination linear Bayesian regression
+
+```{julia}
+m = linear_regression_ard(Xdt, Ydt)
+```
+
+```{julia}
+#| eval: false
+reg_ard = sample(m, NUTS(; adtype = AutoReverseDiff(; compile = true)), 1000);
+```
+
+```{julia}
+#| eval: false
+coeffs = chain_summary(reg_ard; quantiles = [0.025, 0.1, 0.5, 0.9, 0.975], pattern = "coefficients")
+coeffs.parameter = sel
+coeffs[coeffs.nonzero, :]
+```

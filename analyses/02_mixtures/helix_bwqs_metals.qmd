@@ -1,0 +1,82 @@
+---
+title: "Bayesian mixture (BWQS) of prenatal metals and birth weight"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Import the clean HELIX dataset and analyse the mixture of chemicals with
+Bayesian weighted quantile sum (BWQS) regression. The models (`bwqs`,
+`bwqs_adv`) live in `src/models.jl` and are fitted with `Turing.jl`.
+
+Source: `EnvBRAN/b_mixture.ipynb` (models from `EnvBRAN/bayes_lib.jl`).
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, StatsBase, Distributions
+using Turing, ReverseDiff, JLD2
+```
+
+Import the clean dataset produced by `01_data_prep/helix_dataset_preparation.qmd`.
+
+```{julia}
+DT = load_helix_clean();
+```
+
+Let's select metals and covariates for the analysis: the metals selected are
+**As**, **Cd**, **Co**, **Cs**, **Cu**, **Hg**, **Mn**, **Mo**, **Pb**. The
+covariates are **maternal BMI pre-pregnancy**, **weight gained during
+pregnancy** and **maternal age**. The outcome is the birth-weight z-score.
+
+```{julia}
+metals  = names(DT)[contains.(names(DT), "m_Log2")][1:9];
+covar   = HELIX_COVARIATES;
+outcome = "bw_zscore";
+
+mx = Matrix{Float64}(DT[:, metals]);
+cx = Matrix{Float64}(DT[:, covar]);
+y  = Vector{Float64}(DT[:, outcome]);
+
+ecdf_score!(mx; scale = 10)   # deciles-like ECDF scores (0–10)
+```
+
+```{julia}
+model     = bwqs(cx, mx, y);
+model_adv = bwqs_adv(cx, mx, y);
+```
+
+Sampling is slow, so the chains are cached in `results/` (the original
+notebook saved them as `mix_sim_chain.jld2` / `mix_adv_chain.jld2`); delete
+the files to re-sample.
+
+```{julia}
+sampler = NUTS(0.65; adtype = AutoReverseDiff(; compile = true))
+function cached_chain(file, model)
+    path = resultsdir(file)
+    isfile(path) && return load_object(path)
+    ch = sample(model, sampler, 5000; thinning = 3)
+    save_object(path, ch)
+    return ch
+end
+chain     = cached_chain("mix_sim_chain.jld2", model);
+chain_adv = cached_chain("mix_adv_chain.jld2", model_adv);
+```
+
+Mixture effect (`beta`): posterior median and 95% credible interval.
+
+```{julia}
+for (lab, ch) in ("bwqs" => chain, "bwqs_adv" => chain_adv)
+    b = draws(ch, :beta)
+    q = round.(quantile(b, [0.5, 0.025, 0.975]); digits = 4)
+    println(lab, ": ", q[1], " (", q[2], "; ", q[3], ")")
+end
+```
+
+Posterior mean weights of each metal:
+
+```{julia}
+show(DataFrame(Metals = metals,
+               w     = posterior_mean(chain, :w),
+               w_adv = posterior_mean(chain_adv, :w)))
+```

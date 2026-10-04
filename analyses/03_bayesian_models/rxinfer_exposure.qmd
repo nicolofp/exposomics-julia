@@ -1,0 +1,100 @@
+---
+title: "RxInfer for Bayesian analysis of the pregnancy exposome"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Message-passing (variational, mean-field) Bayesian multivariate linear
+regression of the birth-weight z-score on the HELIX pregnancy exposome
+with `RxInfer.jl`, compared with OLS.
+
+Source: `EnvBRAN/rxinfer_exposure.md` (the `.ipynb` only survived as a
+checkpoint; the `.md` export was the most complete version).
+
+::: {.callout-note}
+Ported from the RxInfer 2 API of the original (`datavar`, `inference`,
+`initmarginals`) to RxInfer ≥ 3 (data as model arguments, `infer`,
+`@initialization`). The model is unchanged.
+:::
+
+```{julia}
+using ExposomicsJulia
+using RxInfer, DataFrames, Statistics, LinearAlgebra, Distributions
+```
+
+```{julia}
+DT = load_helix_clean();
+enames   = vcat(HELIX_COVARIATES, helix_exposure_names(DT))
+Exposure = Matrix{Float64}(DT[:, enames])
+bw       = Vector{Float64}(DT.bw_zscore);
+```
+
+```{julia}
+n = size(Exposure, 1)
+m = size(Exposure, 2)
+
+@model function multivariate_linear_regression(y, x, n, m)
+    a ~ MvNormalMeanCovariance(zeros(m), diagm(ones(m)))
+    b ~ NormalMeanVariance(0.0, 1.0)
+    W ~ InverseWishart(n + 2, diageye(n))
+    c ~ ones(n) * b
+    z ~ x * a + c
+    y ~ MvNormalMeanCovariance(z, W)
+end
+```
+
+```{julia}
+#| eval: false
+results = infer(
+    model          = multivariate_linear_regression(n = n, m = m),
+    data           = (y = bw, x = Exposure),
+    initialization = @initialization(q(W) = InverseWishart(n + 2, diageye(n))),
+    returnvars     = (a = KeepLast(), b = KeepLast(), W = KeepLast()),
+    free_energy    = true,
+    iterations     = 20,
+    constraints    = MeanField()
+)
+```
+
+Bethe free energy convergence (truncating the initial step):
+
+```{julia}
+#| eval: false
+using Plots
+plot(results.free_energy[2:end], title = "Bethe Free Energy convergence", label = nothing, size = (400, 300))
+```
+
+Posterior credible intervals of the exposure effects:
+
+```{julia}
+#| eval: false
+as = rand(results.posteriors[:a], 10000)
+DT_results = DataFrame(Variable = enames,
+                       Mean   = vec(mean(as; dims = 2)),
+                       CI0025 = [quantile(as[i, :], 0.025) for i in 1:m],
+                       CI0975 = [quantile(as[i, :], 0.975) for i in 1:m])
+DT_results.sig = credible_nonzero(DT_results.CI0025, DT_results.CI0975)
+show(DT_results[DT_results.sig, :])
+```
+
+Normal approximation p-values from the posterior means/SDs:
+
+```{julia}
+#| eval: false
+betas = vcat(mean(results.posteriors[:b]), mean(results.posteriors[:a]))
+stds  = vcat(std(results.posteriors[:b]), sqrt.(diag(cov(results.posteriors[:a]))))
+DT_bayes = DataFrame(Names = vcat("intercept", enames), beta = betas, std = stds,
+                     p_value = cdf.(TDist(n - m), -abs.(betas ./ stds)))
+show(DT_bayes[DT_bayes.p_value .< 0.05, :])
+```
+
+Comparison with OLS (`ols_summary`; `two_sided = false` reproduces the
+one-sided p-values of the original notebook):
+
+```{julia}
+X_ols = hcat(ones(n), Exposure)
+DT_inf = ols_summary(X_ols, bw, vcat("intercept", enames); two_sided = false)
+show(DT_inf[DT_inf.p_value .< 0.05, :])
+```

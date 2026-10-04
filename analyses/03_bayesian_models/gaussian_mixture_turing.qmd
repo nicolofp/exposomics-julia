@@ -1,0 +1,76 @@
+---
+title: "Gaussian mixture model with Turing"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+Bayesian Gaussian mixture model with explicit cluster assignments, sampled
+with a Gibbs combination of particle Gibbs (for the discrete assignments)
+and HMC (for means and weights). The data have three clusters and the
+model is over-specified with `K = 4` components.
+
+Source: `EnvBRAN/test_gmm.ipynb` (titled "Infinite GMM"; the `.html`
+render and `.md` export were dropped).
+
+::: {.callout-note}
+The original used the Turing ≤ 0.35 syntax `Gibbs(PG(100, :k), HMC(0.05, 10, :μ, :w))`;
+current Turing pairs variables with samplers: `Gibbs(:k => PG(100), (:μ, :w) => HMC(0.05, 10))`.
+:::
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, LinearAlgebra, Plots, StatsBase
+using Distributions
+using Turing
+```
+
+```{julia}
+w = [0.33, 0.33, 0.34]
+μ = [[5.0, 5.0], [10.0, 0.0], [0.0, 10.0]]
+mixturemodel = MixtureModel([MvNormal(μₖ, 0.1 * I) for μₖ in μ], w)
+
+N = 80
+xa = rand(mixturemodel, N);
+scatter(xa[1, :], xa[2, :]; label = "")
+```
+
+```{julia}
+@model function gaussian_mixture_model4(x)
+    K = 4
+    # cluster means
+    μ ~ filldist(MvNormal(zeros(2), 2.0 * I), K)
+    # cluster weights (Dirichlet with αₖ = 2)
+    w ~ Dirichlet(K, 2.0)
+    distribution_assignments = Categorical(w)
+
+    D, N = size(x)
+    distribution_clusters = [MvNormal(m, 2.0 * I) for m in eachcol(μ)]
+
+    # assignment and likelihood for each datum
+    k = Vector{Int}(undef, N)
+    for i in 1:N
+        k[i] ~ distribution_assignments
+        x[:, i] ~ distribution_clusters[k[i]]
+    end
+    return k
+end
+
+model = gaussian_mixture_model4(xa);
+```
+
+```{julia}
+#| eval: false
+sampler = Gibbs(:k => PG(100), (:μ, :w) => HMC(0.05, 10))
+@time chains = sample(model, sampler, 100);
+# multiple chains: sample(model, sampler, MCMCThreads(), 100, 3)
+```
+
+Posterior median cluster assignment of each point:
+
+```{julia}
+#| eval: false
+mdn = vec(median(draws(chains, :k); dims = 1))
+countmap(mdn)
+```

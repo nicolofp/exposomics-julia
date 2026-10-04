@@ -1,0 +1,125 @@
+---
+title: "GSE154829: miRNA and asthma (ARD logistic, Gamma–Poisson, SOM, DPMM)"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+miRNA expression (GEO **GSE154829**, 400 samples × 2102 miRNA) and asthma:
+SVD, per-miRNA histograms, Bayesian logistic regression with ARD priors
+(`logistic_ard`), a Gamma–Poisson model for the counts
+(`gamma_poisson`), a self-organising map and Dirichlet-process mixture
+clustering (`DPMMSubClusters`).
+
+Source: `met_classification/nb_regression.jl` (models moved to `src/models.jl`;
+`ard_logistic_regression.jl` contained only the model).
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Random, CategoricalArrays, LinearAlgebra, Distributions, Statistics, StatsBase
+using Plots, Turing, ReverseDiff, GigaSOM
+```
+
+```{julia}
+#| eval: false
+df   = read_arrow(datadir("GSE154829", "GSE154829_cov.arrow"));
+mRNA = read_arrow(datadir("GSE154829", "GSE154829_miRNA.arrow"));
+Mrna = permutedims(Matrix{Float64}(mRNA[:, 2:401]))      # samples × miRNA
+```
+
+## SVD and descriptives
+
+```{julia}
+#| eval: false
+svd_mrna = svd(Mrna)
+var_expl = svd_mrna.S .^ 2 ./ sum(svd_mrna.S .^ 2)
+sum(var_expl[1:10])      # first 10 components explain ~98% of the variance
+scatter(svd_mrna.U[:, 1], svd_mrna.U[:, 2], label = "")
+
+Mrna_c = rescale(Mrna)
+mv = DataFrame(media_ge = vec(mean(Mrna, dims = 1)), std_ge = vec(std(Mrna, dims = 1)))
+scatter(mv[:, 1], mv[:, 2], label = "")
+heatmap(cor(Mrna))
+```
+
+50-bin histogram counts of every miRNA:
+
+```{julia}
+#| eval: false
+Dmat = hcat(string.(mRNA.Gene), zeros(size(Mrna, 2), 50))
+Threads.@threads for i in 1:size(Mrna, 2)
+    m, M = extrema(Mrna[:, i])
+    h = StatsBase.fit(Histogram, Mrna[:, i], range(m, M; length = 51))
+    Dmat[i, 2:51] = h.weights'
+end
+```
+
+## ARD logistic regression for asthma
+
+```{julia}
+#| eval: false
+asthma = df.asthma[1:400]
+valid = .!ismissing.(asthma)
+y = Int.(Array{Int64}(asthma[valid]) .>= 1)      # 0 = no, 1–2 = yes
+x = Mrna_c[valid, :]
+
+chain_lard = sample(logistic_ard(x, y), NUTS(; adtype = AutoReverseDiff(; compile = true)), 1500);
+ard_res = chain_summary(chain_lard; pattern = "β₁")
+sum(ard_res.nonzero)
+```
+
+## Gamma–Poisson model of the counts
+
+```{julia}
+#| eval: false
+histogram(Mrna[:, 2], label = "observed")
+histogram!(rand(Poisson(mean(Mrna[:, 2])), 400), color = "orange", label = "Poisson")
+
+chain_gp = sample(gamma_poisson(permutedims(Mrna)), NUTS(), 1500);
+```
+
+## Self-organising map
+
+```{julia}
+#| eval: false
+X = permutedims(x)
+som = initGigaSOM(X, 10, 10)
+som = trainGigaSOM(som, X)
+tmp = mapToGigaSOM(som, X)
+countmap(tmp.index)
+e = embedGigaSOM(som, X)
+scatter(e[:, 1], e[:, 2], label = "")
+```
+
+## Dirichlet-process mixture clustering
+
+::: {.callout-warning}
+`DPMMSubClusters.jl` is not in `Project.toml`: it pins old versions of JLD2,
+Clustering and StatsBase and would hold the whole environment back (Turing
+0.35, Flux 0.14, RxInfer 2, which do not load on current Julia). Run this
+section in a separate environment with `] add DPMMSubClusters`.
+:::
+
+```{julia}
+#| eval: false
+using DPMMSubClusters, Random
+
+function plot_dp_2d(pts, labels)
+    plt = Plots.plot()
+    Plots.plot!(pts[1, :], pts[2, :], seriestype = :scatter, color = Int64.(labels),
+                markersize = 3, markerstrokewidth = 0.5, label = "")
+    return plt
+end
+
+# simulated check
+Random.seed!(1245)
+xs, labels_s, clusters_s = generate_gaussian_data(10^4, 2, 6, 80.0)
+plot_dp_2d(xs, labels_s)
+
+# first two left singular vectors of the miRNA matrix
+svd_met = svd(X)
+pts = permutedims(svd_met.U[:, 1:2])
+labels, clusters, weights = DPMMSubClusters.fit(pts, 1.0, iters = 100, seed = 1234)
+plot_dp_2d(pts, labels)
+```

@@ -1,0 +1,67 @@
+---
+title: "PCA and low-rank models for metabolomics and miRNA"
+author: "Nicolò Foppa Pedretti"
+engine: julia
+julia:
+  exeflags: ["--project=projects/exposomics-julia"]
+---
+
+PCA of untargeted urine metabolomics (ST001828, negative mode) and of
+placental miRNA (GSE108497), plus a non-negative/simplex low-rank
+factorisation (GLRM).
+
+Sources: `met_classification/dim_reduction.jl` and
+`met_classification/clustering_cpgs.jl`.
+
+::: {.callout-warning}
+The originals used `LowRankModels.jl` (`pca`, `qpca`, `GLRM`), which is not
+installable together with current DataFrames (it requires DataFrames < 0.22).
+PCA is done here with `MultivariateStats`; the GLRM section is kept for
+reference and needs a separate environment with `LowRankModels`.
+:::
+
+```{julia}
+using ExposomicsJulia
+using DataFrames, Statistics, LinearAlgebra, Plots
+using MultivariateStats
+```
+
+## ST001828 urine metabolites (negative mode)
+
+Metabolites with ≤ 25 missing samples, median-imputed, standardised.
+
+```{julia}
+#| eval: false
+df    = read_arrow(datadir("ST001828", "covariates.arrow"));
+buneg = read_arrow(datadir("ST001828", "buneg.arrow"));
+M_buneg, met_ids = omics_matrix(buneg, :metabolite, 2:101; max_missing = 25)
+M10 = M_buneg[:, 1:10]
+
+pca_buneg = fit(PCA, permutedims(M10); maxoutdim = 2)
+Z = predict(pca_buneg, permutedims(M10))
+scatter(Z[1, :], Z[2, :], label = "", title = "PCA ST001828 (10 metabolites)")
+```
+
+Simplex-constrained low-rank model (requires `LowRankModels`):
+
+```{julia}
+#| eval: false
+using LowRankModels
+simplex_pca = GLRM(M10, QuadLoss(), SimplexConstraint(), ZeroReg(), 10)
+X, Y, ch = fit!(simplex_pca)
+sum(X[:, 1])      # each sample's scores lie on the simplex
+X' * Y
+```
+
+## GSE108497 placental miRNA
+
+Only miRNAs without missing values.
+
+```{julia}
+#| eval: false
+mirna = read_arrow(datadir("GSE108497", "GSE108497_miRNA_norm.arrow"));
+M_df, ids = omics_matrix(mirna, :ID_REF, 2:513; max_missing = 0)
+pca_mirna = fit(PCA, permutedims(M_df); maxoutdim = 2)   # was LowRankModels.qpca(M_df, 2)
+Zm = predict(pca_mirna, permutedims(M_df))
+scatter(Zm[1, :], Zm[2, :], label = "", title = "PCA GSE108497 miRNA")
+```
