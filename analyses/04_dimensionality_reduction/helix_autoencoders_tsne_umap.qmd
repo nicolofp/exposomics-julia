@@ -47,10 +47,10 @@ cohort = string.(DT.h_cohort);
 
 ```{julia}
 #| label: autoencoder
-r = size(M_exp, 2)
+r = size(M_exp, 1)
 model = Chain(Dense(r, 150, leakyrelu), Dense(150, 70, leakyrelu),
-              Dense(70, 20, leakyrelu), Dense(20, 2, leakyrelu),     # encoder
-              Dense(2, 20, leakyrelu), Dense(20, 70, leakyrelu),
+              Dense(70, 20, leakyrelu), Dense(20, 5, leakyrelu),     # encoder
+              Dense(5, 20, leakyrelu), Dense(20, 70, leakyrelu),
               Dense(70, 150, leakyrelu), Dense(150, r))              # decoder
 
 ae_loss(m, x) = Flux.Losses.mse(m(x), x)
